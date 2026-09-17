@@ -1,0 +1,4 @@
+interface:
+  display_name: "English Learning"
+  short_description: "English courses and adaptive reading practice"
+  default_prompt: "Use $english-learning /read to give me reading practice at my current level."
