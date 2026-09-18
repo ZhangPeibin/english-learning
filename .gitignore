@@ -1,3 +1,6 @@
 .DS_Store
 /LEARNING.md
 /ENGLISH_LEARNING.md
+/apps/voice-backend/node_modules/
+/apps/voice-backend/dist/
+/apps/voice-backend/.runtime/
