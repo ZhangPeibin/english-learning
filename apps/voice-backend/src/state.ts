@@ -1,15 +1,20 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Config } from "./config.js";
 
-export interface SessionRecord { codexThreadId?: string }
+export interface TurnResult { turnId: string; transcript: string; replyText: string }
+export interface SessionRecord {
+  codexThreadId?: string;
+  completedTurns: Record<string, TurnResult>;
+}
 interface PersistedState { sessions: Record<string, SessionRecord> }
 
 export class StateStore {
   readonly learningPath: string;
   private readonly statePath: string;
   private state: PersistedState = { sessions: {} };
+  private pendingUpdate: Promise<void> = Promise.resolve();
 
   constructor(private readonly config: Config) {
     this.learningPath = path.join(config.runtimeDir, "LEARNING.md");
@@ -20,6 +25,7 @@ export class StateStore {
     await mkdir(this.config.runtimeDir, { recursive: true, mode: 0o700 });
     try {
       this.state = JSON.parse(await readFile(this.statePath, "utf8")) as PersistedState;
+      for (const session of Object.values(this.state.sessions)) session.completedTurns ??= {};
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       await this.persist();
@@ -38,30 +44,46 @@ export class StateStore {
 
   async createSession(): Promise<string> {
     const id = randomUUID();
-    this.state.sessions[id] = {};
-    await this.persist();
+    await this.update((state) => { state.sessions[id] = { completedTurns: {} }; });
     return id;
   }
 
   getSession(id: string): SessionRecord | undefined { return this.state.sessions[id]; }
 
-  async setThread(id: string, codexThreadId: string): Promise<void> {
-    const session = this.state.sessions[id];
-    if (!session) throw new Error("Session disappeared");
-    session.codexThreadId = codexThreadId;
-    await this.persist();
+  async completeTurn(id: string, codexThreadId: string, result: TurnResult): Promise<void> {
+    await this.update((state) => {
+      const session = state.sessions[id];
+      if (!session) throw new Error("Session disappeared");
+      session.codexThreadId = codexThreadId;
+      session.completedTurns[result.turnId] = result;
+    });
   }
 
   async deleteSession(id: string): Promise<boolean> {
     if (!this.state.sessions[id]) return false;
-    delete this.state.sessions[id];
-    await this.persist();
+    await this.update((state) => { delete state.sessions[id]; });
     return true;
   }
 
-  private async persist(): Promise<void> {
+  private async update(change: (state: PersistedState) => void): Promise<void> {
+    const operation = this.pendingUpdate.then(async () => {
+      const next = structuredClone(this.state);
+      change(next);
+      await this.persist(next);
+      this.state = next;
+    });
+    this.pendingUpdate = operation.catch(() => {});
+    return operation;
+  }
+
+  private async persist(state = this.state): Promise<void> {
     const temporary = `${this.statePath}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(this.state, null, 2)}\n`, { mode: 0o600 });
-    await rename(temporary, this.statePath);
+    try {
+      await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+      await rename(temporary, this.statePath);
+    } catch (error) {
+      await rm(temporary, { force: true });
+      throw error;
+    }
   }
 }

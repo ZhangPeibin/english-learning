@@ -5,6 +5,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "../src/config.js";
 import { buildApp } from "../src/app.js";
+import { StateStore } from "../src/state.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -97,9 +98,17 @@ async function missing(filePath: string): Promise<boolean> {
   return stat(filePath).then(() => false, () => true);
 }
 
+async function waitForFile(filePath: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (!await missing(filePath)) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for ${path.basename(filePath)}`);
+}
+
 describe("voice tutor API", () => {
   test("protects the API and completes then resumes a private tutor session", async () => {
-    const { config, callsPath } = await fixtureConfig();
+    const { config, callsPath, ffmpegCallsPath } = await fixtureConfig();
     const logLines: string[] = [];
     let app = await buildApp(config, { logger: { level: "info", stream: { write: (line: string) => logLines.push(line) } } });
     const health = await app.inject({ method: "GET", url: "/health" });
@@ -148,8 +157,23 @@ describe("voice tutor API", () => {
     expect(successLogs).not.toContain("Nice to hear you");
     expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("existing learner progress\n");
 
+    const duplicate = await app.inject({
+      method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: wavMultipart(boundary, "turn-one")
+    });
+    expect(duplicate.json()).toEqual(first.json());
+    expect((await readFile(callsPath, "utf8")).trim().split("\n")).toHaveLength(1);
+    expect((await readFile(ffmpegCallsPath, "utf8")).trim().split("\n")).toHaveLength(2);
+
     await app.close();
     app = await buildApp(config, { logger: false });
+    const restartedDuplicate = await app.inject({
+      method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: wavMultipart(boundary, "turn-one")
+    });
+    expect(restartedDuplicate.json()).toEqual(first.json());
     const second = await app.inject({
       method: "POST",
       url: `/v1/sessions/${sessionId}/turns`,
@@ -171,9 +195,58 @@ describe("voice tutor API", () => {
     const removed = await app.inject({ method: "DELETE", url: `/v1/sessions/${sessionId}`, headers: auth });
     expect(removed.statusCode).toBe(204);
     expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("existing learner progress\n");
+    const persisted = JSON.parse(await readFile(path.join(config.runtimeDir, "sessions.json"), "utf8"));
+    expect(persisted.sessions[sessionId]).toBeUndefined();
     const gone = await app.inject({ method: "DELETE", url: `/v1/sessions/${sessionId}`, headers: auth });
     expect(gone.statusCode).toBe(404);
     await app.close();
+  });
+
+  test("rejects an overlapping turn without launching another dependency pipeline", async () => {
+    const { config, callsPath, ffmpegCallsPath } = await fixtureConfig();
+    const startedPath = path.join(config.runtimeDir, "codex-started");
+    const releasePath = path.join(config.runtimeDir, "release-codex");
+    await executable(config.codexPath, `
+      const fs = require("node:fs");
+      fs.appendFileSync(${JSON.stringify(callsPath)}, "call\\n");
+      fs.writeFileSync(${JSON.stringify(startedPath)}, "started");
+      const timer = setInterval(() => {
+        if (!fs.existsSync(${JSON.stringify(releasePath)})) return;
+        clearInterval(timer);
+        console.log(JSON.stringify({ type: "thread.started", thread_id: "thread-concurrent" }));
+        console.log(JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: JSON.stringify({ replyText: "First reply" }) } }));
+      }, 10);
+    `);
+    const app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    const boundary = "concurrent-boundary";
+    const first = app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` }, payload: wavMultipart(boundary, "turn-first") });
+    await waitForFile(startedPath);
+    const second = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` }, payload: wavMultipart(boundary, "turn-second") });
+    expect(second.statusCode).toBe(409);
+    expect(second.json().error).toMatchObject({ code: "session_busy", retryable: true });
+    expect((await readFile(callsPath, "utf8")).trim().split("\n")).toHaveLength(1);
+    expect((await readFile(ffmpegCallsPath, "utf8")).trim().split("\n")).toHaveLength(2);
+    await writeFile(releasePath, "release");
+    expect((await first).statusCode).toBe(200);
+    await app.close();
+  });
+
+  test("does not retain a state mutation when atomic replacement fails", async () => {
+    const { config } = await fixtureConfig();
+    const store = new StateStore(config);
+    await store.initialize();
+    const statePath = path.join(config.runtimeDir, "sessions.json");
+    await rm(statePath);
+    await mkdir(statePath);
+    await expect(store.createSession()).rejects.toThrow();
+    await rm(statePath, { recursive: true });
+    await Promise.all([store.createSession(), store.createSession()]);
+    const persisted = JSON.parse(await readFile(statePath, "utf8"));
+    expect(Object.keys(persisted.sessions)).toHaveLength(2);
+    expect((await readdir(config.runtimeDir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
   test("initializes learner state from the template when no existing progress is present", async () => {

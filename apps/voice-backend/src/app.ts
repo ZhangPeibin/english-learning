@@ -13,6 +13,7 @@ const errorBody = (code: string, message: string, retryable = false) => ({ error
 export async function buildApp(config: Config, options: { logger?: FastifyServerOptions["logger"] } = {}) {
   const app = Fastify({ logger: options.logger ?? true });
   const state = new StateStore(config);
+  const activeSessions = new Set<string>();
   await state.initialize();
   await app.register(multipart, { limits: { files: 1, fileSize: MAX_AUDIO_BYTES, fields: 1 } });
 
@@ -39,6 +40,7 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
     if (!session) return reply.code(404).send(errorBody("session_not_found", "Session not found."));
     const workDir = await mkdtemp(path.join(tmpdir(), "voice-turn-"));
     const abortController = new AbortController();
+    let ownsActiveTurn = false;
     request.raw.once("aborted", () => abortController.abort());
     const dependencyOutcome = (stage: string) => (outcome: string, durationMs: number) => {
       request.log.info({ requestId: request.id, stage, outcome, durationMs }, "dependency completed");
@@ -59,6 +61,13 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       }
       if (!turnId) throw new AudioError("missing_turn_id", 400);
       if (!sourcePath) throw new AudioError("missing_audio", 400);
+      const completed = session.completedTurns[turnId];
+      if (completed) return completed;
+      if (activeSessions.has(request.params.sessionId)) {
+        return reply.code(409).send(errorBody("session_busy", "Another turn is already in progress.", true));
+      }
+      activeSessions.add(request.params.sessionId);
+      ownsActiveTurn = true;
       const normalizedPath = path.join(workDir, "normalized.wav");
       await normalizeAudio(config, sourcePath, normalizedPath, abortController.signal, dependencyOutcome("ffmpeg"));
       const transcript = await recognizeAudio(config, normalizedPath, path.join(workDir, "transcript"), abortController.signal, dependencyOutcome("whisper"));
@@ -71,8 +80,9 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
         dependencyOutcome("codex")("failed", Date.now() - codexStarted);
         throw error;
       }
-      await state.setThread(request.params.sessionId, result.threadId);
-      return { turnId, transcript, replyText: result.replyText };
+      const completedTurn = { turnId, transcript, replyText: result.replyText };
+      await state.completeTurn(request.params.sessionId, result.threadId, completedTurn);
+      return completedTurn;
     } catch (error) {
       let audioError: AudioError;
       if (error instanceof AudioError) audioError = error;
@@ -97,6 +107,7 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       reply.code(audioError.statusCode);
       return errorBody(audioError.code, messages[audioError.code] ?? "The voice turn could not be completed.", audioError.retryable);
     } finally {
+      if (ownsActiveTurn) activeSessions.delete(request.params.sessionId);
       await rm(workDir, { recursive: true, force: true });
       request.log.info({ requestId: request.id, durationMs: Date.now() - requestStarted }, "voice turn completed");
     }
