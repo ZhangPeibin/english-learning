@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { buildApp } from "../dist/app.js";
-import { loadConfig } from "../dist/config.js";
+import { buildApp } from "../dist/src/app.js";
+import { loadConfig } from "../dist/src/config.js";
 
 const audioPath = process.env.VOICE_SMOKE_AUDIO?.trim();
 if (!audioPath) throw new Error("VOICE_SMOKE_AUDIO is required and must name a recorded utterance");
