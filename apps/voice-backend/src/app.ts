@@ -1,20 +1,20 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyServerOptions } from "fastify";
 import multipart from "@fastify/multipart";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "./config.js";
-import { runProcess } from "./process.js";
 import { StateStore } from "./state.js";
-import { askTutor, transcribe } from "./tutor.js";
+import { askTutor } from "./tutor.js";
+import { AudioError, MAX_AUDIO_BYTES, audioExtension, normalizeAudio, recognizeAudio } from "./audio.js";
 
 const errorBody = (code: string, message: string, retryable = false) => ({ error: { code, message, retryable } });
 
-export async function buildApp(config: Config) {
-  const app = Fastify({ logger: false });
+export async function buildApp(config: Config, options: { logger?: FastifyServerOptions["logger"] } = {}) {
+  const app = Fastify({ logger: options.logger ?? true });
   const state = new StateStore(config);
   await state.initialize();
-  await app.register(multipart, { limits: { files: 1, fileSize: 10 * 1024 * 1024, fields: 1 } });
+  await app.register(multipart, { limits: { files: 1, fileSize: MAX_AUDIO_BYTES, fields: 1 } });
 
   app.get("/health", async () => ({ status: "ready" }));
   app.addHook("onRequest", async (request, reply) => {
@@ -34,9 +34,15 @@ export async function buildApp(config: Config) {
   });
 
   app.post<{ Params: { sessionId: string } }>("/v1/sessions/:sessionId/turns", async (request, reply) => {
+    const requestStarted = Date.now();
     const session = state.getSession(request.params.sessionId);
     if (!session) return reply.code(404).send(errorBody("session_not_found", "Session not found."));
     const workDir = await mkdtemp(path.join(tmpdir(), "voice-turn-"));
+    const abortController = new AbortController();
+    request.raw.once("aborted", () => abortController.abort());
+    const dependencyOutcome = (stage: string) => (outcome: string, durationMs: number) => {
+      request.log.info({ requestId: request.id, stage, outcome, durationMs }, "dependency completed");
+    };
     try {
       const parts = request.parts();
       let turnId = "";
@@ -44,26 +50,47 @@ export async function buildApp(config: Config) {
       for await (const part of parts) {
         if (part.type === "field" && part.fieldname === "turnId") turnId = String(part.value).trim();
         if (part.type === "file" && part.fieldname === "audio") {
-          if (!new Set(["audio/wav", "audio/x-wav", "audio/wave"]).has(part.mimetype)) {
-            part.file.resume();
-            return reply.code(415).send(errorBody("unsupported_audio", "A WAV recording is required."));
-          }
-          sourcePath = path.join(workDir, "source.wav");
+          const extension = audioExtension(part.mimetype);
+          sourcePath = path.join(workDir, `source${extension}`);
           await writeFile(sourcePath, part.file);
+          if (part.file.truncated) throw new AudioError("audio_too_large", 413);
+          if ((await stat(sourcePath)).size === 0) throw new AudioError("empty_audio", 400);
         }
       }
-      if (!turnId || !sourcePath) return reply.code(400).send(errorBody("invalid_turn", "turnId and audio are required."));
+      if (!turnId) throw new AudioError("missing_turn_id", 400);
+      if (!sourcePath) throw new AudioError("missing_audio", 400);
       const normalizedPath = path.join(workDir, "normalized.wav");
-      await runProcess(config.ffmpegPath, ["-nostdin", "-y", "-i", sourcePath, "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", normalizedPath]);
-      await readFile(normalizedPath);
-      const transcript = await transcribe(config, normalizedPath, path.join(workDir, "transcript"));
+      await normalizeAudio(config, sourcePath, normalizedPath, abortController.signal, dependencyOutcome("ffmpeg"));
+      const transcript = await recognizeAudio(config, normalizedPath, path.join(workDir, "transcript"), abortController.signal, dependencyOutcome("whisper"));
       const result = await askTutor(config, transcript, session.codexThreadId);
       await state.setThread(request.params.sessionId, result.threadId);
       return { turnId, transcript, replyText: result.replyText };
-    } catch {
-      return reply.code(502).send(errorBody("dependency_failed", "The voice turn could not be completed.", true));
+    } catch (error) {
+      let audioError: AudioError;
+      if (error instanceof AudioError) audioError = error;
+      else if (error instanceof app.multipartErrors.RequestFileTooLargeError) audioError = new AudioError("audio_too_large", 413);
+      else audioError = new AudioError("dependency_failed", 502, true);
+      request.log.warn({ requestId: request.id, errorCode: audioError.code, durationMs: Date.now() - requestStarted }, "voice turn failed");
+      const messages: Record<string, string> = {
+        unsupported_audio: "The recording format is not supported.",
+        audio_too_large: "The recording exceeds the 10 MB limit.",
+        audio_too_long: "The recording exceeds the 60 second limit.",
+        empty_audio: "The recording is empty.",
+        invalid_audio: "The recording could not be decoded.",
+        missing_audio: "An audio recording is required.",
+        missing_turn_id: "turnId is required.",
+        empty_transcript: "No speech was recognized.",
+        normalization_timeout: "Audio processing timed out.",
+        normalization_failed: "The recording could not be processed.",
+        transcription_timeout: "Speech recognition timed out.",
+        transcription_failed: "Speech recognition failed.",
+        dependency_failed: "The voice turn could not be completed."
+      };
+      reply.code(audioError.statusCode);
+      return errorBody(audioError.code, messages[audioError.code] ?? "The voice turn could not be completed.", audioError.retryable);
     } finally {
       await rm(workDir, { recursive: true, force: true });
+      request.log.info({ requestId: request.id, durationMs: Date.now() - requestStarted }, "voice turn completed");
     }
   });
 

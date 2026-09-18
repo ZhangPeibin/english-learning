@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { chmod, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import http from "node:http";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "../src/config.js";
@@ -13,7 +14,7 @@ async function executable(filePath: string, source: string): Promise<void> {
   await chmod(filePath, 0o755);
 }
 
-async function fixtureConfig(existingProgress = true): Promise<{ config: Config; callsPath: string }> {
+async function fixtureConfig(existingProgress = true): Promise<{ config: Config; callsPath: string; ffmpegCallsPath: string }> {
   const root = await mkdtemp(path.join(tmpdir(), "voice-backend-test-"));
   roots.push(root);
   const runtimeDir = path.join(root, "runtime");
@@ -29,13 +30,16 @@ async function fixtureConfig(existingProgress = true): Promise<{ config: Config;
   const whisperModelPath = path.join(root, "model.bin");
   await writeFile(whisperModelPath, "fixture");
   const callsPath = path.join(root, "codex-calls.jsonl");
+  const ffmpegCallsPath = path.join(root, "ffmpeg-calls.jsonl");
   const ffmpegPath = path.join(binDir, "ffmpeg");
   const whisperPath = path.join(binDir, "whisper-cli");
   const codexPath = path.join(binDir, "codex");
   await executable(ffmpegPath, `
     const fs = require("node:fs");
     const input = process.argv[process.argv.indexOf("-i") + 1];
-    fs.copyFileSync(input, process.argv.at(-1));
+    fs.appendFileSync(${JSON.stringify(ffmpegCallsPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+    if (process.argv.at(-1) === "-") process.stderr.write("Duration: 00:00:01.00\\n");
+    else fs.copyFileSync(input, process.argv.at(-1));
   `);
   await executable(whisperPath, `
     const fs = require("node:fs");
@@ -50,6 +54,7 @@ async function fixtureConfig(existingProgress = true): Promise<{ config: Config;
   `);
   return {
     callsPath,
+    ffmpegCallsPath,
     config: {
       accessToken: "test-secret-token",
       port: 0,
@@ -64,26 +69,38 @@ async function fixtureConfig(existingProgress = true): Promise<{ config: Config;
 }
 
 function wavMultipart(boundary: string, turnId: string): Buffer {
+  return audioMultipart(boundary, turnId, "audio/wav", "speech.wav", "RIFF-fixture-wave");
+}
+
+function audioMultipart(boundary: string, turnId: string, mimetype: string, filename: string, content: string | Buffer): Buffer {
   const prefix = [
     `--${boundary}`,
     'Content-Disposition: form-data; name="turnId"',
     "",
     turnId,
     `--${boundary}`,
-    'Content-Disposition: form-data; name="audio"; filename="speech.wav"',
-    "Content-Type: audio/wav",
+    `Content-Disposition: form-data; name="audio"; filename="${filename}"`,
+    `Content-Type: ${mimetype}`,
     "",
-    "RIFF-fixture-wave",
-    `--${boundary}--`,
     ""
   ].join("\r\n");
-  return Buffer.from(prefix);
+  return Buffer.concat([Buffer.from(prefix), Buffer.isBuffer(content) ? content : Buffer.from(content), Buffer.from(`\r\n--${boundary}--\r\n`)]);
+}
+
+async function session(app: Awaited<ReturnType<typeof buildApp>>, config: Config): Promise<{ sessionId: string; auth: { authorization: string } }> {
+  const auth = { authorization: `Bearer ${config.accessToken}` };
+  const created = await app.inject({ method: "POST", url: "/v1/sessions", headers: auth });
+  return { sessionId: created.json().sessionId, auth };
+}
+
+async function missing(filePath: string): Promise<boolean> {
+  return stat(filePath).then(() => false, () => true);
 }
 
 describe("voice tutor API", () => {
   test("protects the API and completes then resumes a private tutor session", async () => {
     const { config, callsPath } = await fixtureConfig();
-    let app = await buildApp(config);
+    let app = await buildApp(config, { logger: false });
     const health = await app.inject({ method: "GET", url: "/health" });
     expect(health.statusCode).toBe(200);
     expect(health.json()).toEqual({ status: "ready" });
@@ -124,7 +141,7 @@ describe("voice tutor API", () => {
     expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("existing learner progress\n");
 
     await app.close();
-    app = await buildApp(config);
+    app = await buildApp(config, { logger: false });
     const second = await app.inject({
       method: "POST",
       url: `/v1/sessions/${sessionId}/turns`,
@@ -153,8 +170,125 @@ describe("voice tutor API", () => {
 
   test("initializes learner state from the template when no existing progress is present", async () => {
     const { config } = await fixtureConfig(false);
-    const app = await buildApp(config);
+    const app = await buildApp(config, { logger: false });
     expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("template progress\n");
+    await app.close();
+  });
+
+  test.each([
+    ["audio/webm", "speech.webm"], ["audio/wav", "speech.wav"], ["audio/mp4", "speech.m4a"], ["audio/ogg", "speech.ogg"]
+  ])("accepts and normalizes %s recordings", async (mimetype, filename) => {
+    const { config, ffmpegCallsPath } = await fixtureConfig();
+    const app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    const boundary = "format-boundary";
+    const response = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: audioMultipart(boundary, `turn-${filename}`, mimetype, filename, "fixture-audio") });
+    expect(response.statusCode).toBe(200);
+    const calls = (await readFile(ffmpegCallsPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual(expect.arrayContaining(["-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le"]));
+    for (const call of calls) {
+      const sourcePath = call[call.indexOf("-i") + 1];
+      expect(await missing(path.dirname(sourcePath))).toBe(true);
+    }
+    await app.close();
+  });
+
+  test.each([
+    ["missing_audio", undefined, "audio/wav", ""],
+    ["empty_audio", "", "audio/wav", ""],
+    ["unsupported_audio", "data", "audio/mpeg", ""],
+    ["audio_too_large", Buffer.alloc(10 * 1024 * 1024 + 1), "audio/wav", ""]
+  ])("rejects invalid upload with %s", async (code, content, mimetype) => {
+    const { config } = await fixtureConfig();
+    const app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    const boundary = "invalid-boundary";
+    const payload = content === undefined
+      ? Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="turnId"\r\n\r\nturn-invalid\r\n--${boundary}--\r\n`)
+      : audioMultipart(boundary, "turn-invalid", mimetype, "speech.bin", content);
+    const response = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` }, payload });
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(response.json().error).toMatchObject({ code, retryable: false });
+    await app.close();
+  });
+
+  test.each([
+    ["invalid_audio", "process.stderr.write('private diagnostic /secret/path'); process.exit(1)", undefined],
+    ["audio_too_long", "process.stderr.write('Duration: 00:01:00.01\\n')", undefined],
+    ["normalization_timeout", "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000)", "ffmpeg"],
+    ["normalization_failed", "process.stderr.write('Duration: 00:00:01.00\\n')", "normalize-fail"],
+    ["transcription_failed", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-fail"],
+    ["empty_transcript", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-empty"],
+    ["transcription_timeout", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-timeout"]
+  ])("maps and cleans the %s terminal path", async (code, probeBehavior, whisperBehavior) => {
+    const { config, ffmpegCallsPath } = await fixtureConfig();
+    config.normalizationTimeoutMs = 500;
+    config.transcriptionTimeoutMs = 500;
+    await executable(config.ffmpegPath, `
+      const fs = require("node:fs");
+      const input = process.argv[process.argv.indexOf("-i") + 1];
+      fs.appendFileSync(${JSON.stringify(ffmpegCallsPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+      if (process.argv.at(-1) === "-") { ${probeBehavior} }
+      else { ${whisperBehavior === "normalize-fail" ? "process.stderr.write('private normalization diagnostic'); process.exit(1);" : "fs.copyFileSync(input, process.argv.at(-1));"} }
+    `);
+    if (whisperBehavior && whisperBehavior !== "normalize-fail") await executable(config.whisperPath, `
+      const fs = require("node:fs");
+      const output = process.argv[process.argv.indexOf("-of") + 1];
+      ${whisperBehavior === "whisper-fail" ? "process.stderr.write('private transcript diagnostic'); process.exit(1);" : ""}
+      ${whisperBehavior === "whisper-empty" ? "fs.writeFileSync(output + '.txt', '');" : ""}
+      ${whisperBehavior === "whisper-timeout" ? "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000);" : ""}
+    `);
+    const logLines: string[] = [];
+    const app = await buildApp(config, { logger: { level: "info", stream: { write: (line: string) => logLines.push(line) } } });
+    const { sessionId, auth } = await session(app, config);
+    const boundary = "failure-boundary";
+    const response = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: audioMultipart(boundary, `turn-${code}`, "audio/wav", "speech.wav", "private raw audio") });
+    expect(response.json().error).toMatchObject({ code });
+    expect(response.body).not.toContain("private");
+    expect(response.body).not.toContain(config.runtimeDir);
+    const calls = (await readFile(ffmpegCallsPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    const sourcePath = calls[0][calls[0].indexOf("-i") + 1];
+    expect(await missing(path.dirname(sourcePath))).toBe(true);
+    const logs = logLines.join("");
+    expect(logs).toContain(`\"errorCode\":\"${code}\"`);
+    expect(logs).toContain("durationMs");
+    expect(logs).not.toContain(config.accessToken);
+    expect(logs).not.toContain("private raw audio");
+    expect(logs).not.toContain("private diagnostic");
+    expect(logs).not.toContain(config.runtimeDir);
+    await app.close();
+  });
+
+  test("cleans a partial upload after the client disconnects", async () => {
+    const { config } = await fixtureConfig();
+    const app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === "string") throw new Error("Expected TCP address");
+    const before = new Set((await readdir(tmpdir())).filter((name) => name.startsWith("voice-turn-")));
+    const boundary = "disconnect-boundary";
+    await new Promise<void>((resolve) => {
+      const request = http.request({ host: "127.0.0.1", port: address.port, method: "POST",
+        path: `/v1/sessions/${sessionId}/turns`, headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` } });
+      request.on("error", () => resolve());
+      request.write(`--${boundary}\r\nContent-Disposition: form-data; name="turnId"\r\n\r\ndisconnected\r\n`);
+      request.write(`--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\npartial`);
+      setTimeout(() => request.destroy(), 25);
+    });
+    let remaining: string[] = [];
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      remaining = (await readdir(tmpdir())).filter((name) => name.startsWith("voice-turn-") && !before.has(name));
+      if (remaining.length === 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(remaining).toEqual([]);
     await app.close();
   });
 });

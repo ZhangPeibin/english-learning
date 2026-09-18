@@ -1,16 +1,8 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Config } from "./config.js";
 import { runProcess } from "./process.js";
 
 export interface TutorResult { threadId: string; replyText: string }
-
-export async function transcribe(config: Config, wavPath: string, outputBase: string): Promise<string> {
-  await runProcess(config.whisperPath, ["-m", config.whisperModelPath, "-f", wavPath, "-otxt", "-of", outputBase]);
-  const transcript = (await readFile(`${outputBase}.txt`, "utf8")).trim();
-  if (!transcript) throw new Error("Transcription was empty");
-  return transcript;
-}
 
 export async function askTutor(config: Config, transcript: string, threadId?: string): Promise<TutorResult> {
   const schemaPath = path.join(config.skillDir, "apps", "voice-backend", "reply-schema.json");

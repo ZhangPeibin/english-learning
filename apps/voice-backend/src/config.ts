@@ -11,6 +11,8 @@ export interface Config {
   whisperPath: string;
   whisperModelPath: string;
   codexPath: string;
+  normalizationTimeoutMs?: number;
+  transcriptionTimeoutMs?: number;
 }
 
 async function requireFile(filePath: string, executable = false): Promise<void> {
