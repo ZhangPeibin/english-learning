@@ -62,7 +62,15 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       const normalizedPath = path.join(workDir, "normalized.wav");
       await normalizeAudio(config, sourcePath, normalizedPath, abortController.signal, dependencyOutcome("ffmpeg"));
       const transcript = await recognizeAudio(config, normalizedPath, path.join(workDir, "transcript"), abortController.signal, dependencyOutcome("whisper"));
-      const result = await askTutor(config, transcript, session.codexThreadId);
+      const codexStarted = Date.now();
+      let result;
+      try {
+        result = await askTutor(config, transcript, session.codexThreadId);
+        dependencyOutcome("codex")("success", Date.now() - codexStarted);
+      } catch (error) {
+        dependencyOutcome("codex")("failed", Date.now() - codexStarted);
+        throw error;
+      }
       await state.setThread(request.params.sessionId, result.threadId);
       return { turnId, transcript, replyText: result.replyText };
     } catch (error) {

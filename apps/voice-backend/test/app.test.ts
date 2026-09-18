@@ -100,7 +100,8 @@ async function missing(filePath: string): Promise<boolean> {
 describe("voice tutor API", () => {
   test("protects the API and completes then resumes a private tutor session", async () => {
     const { config, callsPath } = await fixtureConfig();
-    let app = await buildApp(config, { logger: false });
+    const logLines: string[] = [];
+    let app = await buildApp(config, { logger: { level: "info", stream: { write: (line: string) => logLines.push(line) } } });
     const health = await app.inject({ method: "GET", url: "/health" });
     expect(health.statusCode).toBe(200);
     expect(health.json()).toEqual({ status: "ready" });
@@ -138,6 +139,13 @@ describe("voice tutor API", () => {
       replyText: "Nice to hear you. What did you do today?"
     });
     expect(first.body).not.toContain("internal-thread-7");
+    const successLogs = logLines.join("");
+    expect(successLogs).toContain('"stage":"codex"');
+    expect(successLogs).toContain('"outcome":"success"');
+    expect(successLogs).toContain("durationMs");
+    expect(successLogs).not.toContain(config.accessToken);
+    expect(successLogs).not.toContain("Hello tutor");
+    expect(successLogs).not.toContain("Nice to hear you");
     expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("existing learner progress\n");
 
     await app.close();
@@ -220,35 +228,43 @@ describe("voice tutor API", () => {
     ["invalid_audio", "process.stderr.write('private diagnostic /secret/path'); process.exit(1)", undefined],
     ["audio_too_long", "process.stderr.write('Duration: 00:01:00.01\\n')", undefined],
     ["normalization_timeout", "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000)", "ffmpeg"],
+    ["normalization_timeout", "setTimeout(() => process.stderr.write('Duration: 00:00:01.00\\n'), 600)", "total-timeout"],
     ["normalization_failed", "process.stderr.write('Duration: 00:00:01.00\\n')", "normalize-fail"],
     ["transcription_failed", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-fail"],
     ["empty_transcript", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-empty"],
-    ["transcription_timeout", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-timeout"]
+    ["transcription_timeout", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-timeout"],
+    ["dependency_failed", "process.stderr.write('Duration: 00:00:01.00\\n')", "codex-fail"]
   ])("maps and cleans the %s terminal path", async (code, probeBehavior, whisperBehavior) => {
     const { config, ffmpegCallsPath } = await fixtureConfig();
-    config.normalizationTimeoutMs = 500;
-    config.transcriptionTimeoutMs = 500;
+    config.normalizationTimeoutMs = 1_000;
+    config.transcriptionTimeoutMs = 1_000;
     await executable(config.ffmpegPath, `
       const fs = require("node:fs");
       const input = process.argv[process.argv.indexOf("-i") + 1];
       fs.appendFileSync(${JSON.stringify(ffmpegCallsPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");
       if (process.argv.at(-1) === "-") { ${probeBehavior} }
-      else { ${whisperBehavior === "normalize-fail" ? "process.stderr.write('private normalization diagnostic'); process.exit(1);" : "fs.copyFileSync(input, process.argv.at(-1));"} }
+      else { ${whisperBehavior === "normalize-fail" ? "process.stderr.write('private normalization diagnostic'); process.exit(1);" : whisperBehavior === "total-timeout" ? "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000);" : "fs.copyFileSync(input, process.argv.at(-1));"} }
     `);
-    if (whisperBehavior && whisperBehavior !== "normalize-fail") await executable(config.whisperPath, `
+    if (whisperBehavior?.startsWith("whisper-")) await executable(config.whisperPath, `
       const fs = require("node:fs");
       const output = process.argv[process.argv.indexOf("-of") + 1];
       ${whisperBehavior === "whisper-fail" ? "process.stderr.write('private transcript diagnostic'); process.exit(1);" : ""}
       ${whisperBehavior === "whisper-empty" ? "fs.writeFileSync(output + '.txt', '');" : ""}
       ${whisperBehavior === "whisper-timeout" ? "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000);" : ""}
     `);
+    if (whisperBehavior === "codex-fail") await executable(config.codexPath, `
+      process.stderr.write("private codex diagnostic");
+      process.exit(1);
+    `);
     const logLines: string[] = [];
     const app = await buildApp(config, { logger: { level: "info", stream: { write: (line: string) => logLines.push(line) } } });
     const { sessionId, auth } = await session(app, config);
     const boundary = "failure-boundary";
+    const requestStarted = Date.now();
     const response = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
       headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` },
       payload: audioMultipart(boundary, `turn-${code}`, "audio/wav", "speech.wav", "private raw audio") });
+    if (whisperBehavior === "total-timeout") expect(Date.now() - requestStarted).toBeLessThan(1_200);
     expect(response.json().error).toMatchObject({ code });
     expect(response.body).not.toContain("private");
     expect(response.body).not.toContain(config.runtimeDir);
@@ -262,6 +278,11 @@ describe("voice tutor API", () => {
     expect(logs).not.toContain("private raw audio");
     expect(logs).not.toContain("private diagnostic");
     expect(logs).not.toContain(config.runtimeDir);
+    if (whisperBehavior === "codex-fail") {
+      expect(logs).toContain('"stage":"codex"');
+      expect(logs).toContain('"outcome":"failed"');
+      expect(logs).not.toContain("private codex diagnostic");
+    }
     await app.close();
   });
 

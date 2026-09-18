@@ -29,11 +29,17 @@ function dependencyError(stage: "normalization" | "transcription", error: unknow
 export async function normalizeAudio(config: Config, sourcePath: string, normalizedPath: string,
   signal: AbortSignal, onOutcome: (outcome: string, durationMs: number) => void): Promise<void> {
   const started = Date.now();
+  const deadline = started + (config.normalizationTimeoutMs ?? 30_000);
+  const remainingTime = () => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new ProcessFailure("timeout");
+    return remaining;
+  };
   try {
     let probe;
     try {
       probe = await runProcess(config.ffmpegPath, ["-nostdin", "-i", sourcePath, "-f", "null", "-"],
-        { timeoutMs: config.normalizationTimeoutMs ?? 30_000, signal });
+        { timeoutMs: remainingTime(), signal });
     } catch (error) {
       if (error instanceof ProcessFailure && error.kind === "timeout") throw dependencyError("normalization", error);
       throw new AudioError("invalid_audio", 400);
@@ -44,7 +50,7 @@ export async function normalizeAudio(config: Config, sourcePath: string, normali
     if (!Number.isFinite(seconds) || seconds <= 0) throw new AudioError("empty_audio", 400);
     if (seconds > 60) throw new AudioError("audio_too_long", 413);
     await runProcess(config.ffmpegPath, ["-nostdin", "-y", "-i", sourcePath, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", normalizedPath],
-      { timeoutMs: config.normalizationTimeoutMs ?? 30_000, signal });
+      { timeoutMs: remainingTime(), signal });
     if ((await readFile(normalizedPath)).length === 0) throw new AudioError("invalid_audio", 400);
     onOutcome("success", Date.now() - started);
   } catch (error) {
