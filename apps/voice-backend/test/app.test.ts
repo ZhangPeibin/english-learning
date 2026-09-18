@@ -13,7 +13,7 @@ async function executable(filePath: string, source: string): Promise<void> {
   await chmod(filePath, 0o755);
 }
 
-async function fixtureConfig(): Promise<{ config: Config; callsPath: string }> {
+async function fixtureConfig(existingProgress = true): Promise<{ config: Config; callsPath: string }> {
   const root = await mkdtemp(path.join(tmpdir(), "voice-backend-test-"));
   roots.push(root);
   const runtimeDir = path.join(root, "runtime");
@@ -25,8 +25,7 @@ async function fixtureConfig(): Promise<{ config: Config; callsPath: string }> {
   await writeFile(path.join(skillDir, "templates", "LEARNING.md"), "template progress\n");
   await mkdir(path.join(skillDir, "apps", "voice-backend"), { recursive: true });
   await writeFile(path.join(skillDir, "apps", "voice-backend", "reply-schema.json"), "{}\n");
-  const sourceLearningPath = path.join(root, "LEARNING.md");
-  await writeFile(sourceLearningPath, "existing learner progress\n");
+  if (existingProgress) await writeFile(path.join(skillDir, "LEARNING.md"), "existing learner progress\n");
   const whisperModelPath = path.join(root, "model.bin");
   await writeFile(whisperModelPath, "fixture");
   const callsPath = path.join(root, "codex-calls.jsonl");
@@ -56,7 +55,6 @@ async function fixtureConfig(): Promise<{ config: Config; callsPath: string }> {
       port: 0,
       runtimeDir,
       skillDir,
-      sourceLearningPath,
       ffmpegPath,
       whisperPath,
       whisperModelPath,
@@ -90,10 +88,17 @@ describe("voice tutor API", () => {
     expect(health.statusCode).toBe(200);
     expect(health.json()).toEqual({ status: "ready" });
 
-    for (const authorization of [undefined, "Bearer wrong"]) {
-      const denied = await app.inject({ method: "POST", url: "/v1/sessions", headers: authorization ? { authorization } : {} });
-      expect(denied.statusCode).toBe(401);
-      expect(denied.json().error.code).toBe("unauthorized");
+    const protectedRequests = [
+      { method: "POST" as const, url: "/v1/sessions" },
+      { method: "POST" as const, url: "/v1/sessions/test-session/turns" },
+      { method: "DELETE" as const, url: "/v1/sessions/test-session" }
+    ];
+    for (const request of protectedRequests) {
+      for (const authorization of [undefined, "Bearer wrong"]) {
+        const denied = await app.inject({ ...request, headers: authorization ? { authorization } : {} });
+        expect(denied.statusCode).toBe(401);
+        expect(denied.json().error.code).toBe("unauthorized");
+      }
     }
 
     const auth = { authorization: `Bearer ${config.accessToken}` };
@@ -143,6 +148,13 @@ describe("voice tutor API", () => {
     expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("existing learner progress\n");
     const gone = await app.inject({ method: "DELETE", url: `/v1/sessions/${sessionId}`, headers: auth });
     expect(gone.statusCode).toBe(404);
+    await app.close();
+  });
+
+  test("initializes learner state from the template when no existing progress is present", async () => {
+    const { config } = await fixtureConfig(false);
+    const app = await buildApp(config);
+    expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("template progress\n");
     await app.close();
   });
 });

@@ -28,10 +28,10 @@ export class StateStore {
       await readFile(this.learningPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      let source = path.join(this.config.skillDir, "templates", "LEARNING.md");
-      if (this.config.sourceLearningPath) {
-        try { await readFile(this.config.sourceLearningPath); source = this.config.sourceLearningPath; } catch {}
-      }
+      const template = path.join(this.config.skillDir, "templates", "LEARNING.md");
+      const progress = this.config.sourceLearningPath ?? path.join(this.config.skillDir, "LEARNING.md");
+      let source = template;
+      try { await readFile(progress); source = progress; } catch {}
       await copyFile(source, this.learningPath);
     }
   }
