@@ -1,4 +1,4 @@
-import { access, mkdir, stat } from "node:fs/promises";
+import { access, mkdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
 export interface Config {
@@ -32,6 +32,26 @@ async function requireDirectory(label: string, directoryPath: string, writable =
   });
 }
 
+function pathsOverlap(first: string, second: string): boolean {
+  const relative = path.relative(first, second);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
+async function prospectiveRealPath(targetPath: string): Promise<string> {
+  const missing: string[] = [];
+  let current = targetPath;
+  while (true) {
+    try {
+      return path.join(await realpath(current), ...missing.reverse());
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) throw new Error("VOICE_RUNTIME_DIR cannot be resolved");
+      missing.push(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
 export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<Config> {
   const required = (name: string): string => {
     const value = env[name]?.trim();
@@ -56,8 +76,6 @@ export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<
     whisperModelPath: required("VOICE_WHISPER_MODEL_PATH"),
     codexPath: required("VOICE_CODEX_PATH")
   };
-  await mkdir(config.runtimeDir, { recursive: true, mode: 0o700 });
-  await requireDirectory("VOICE_RUNTIME_DIR", config.runtimeDir, true);
   await requireDirectory("VOICE_SKILL_DIR", config.skillDir);
   await Promise.all([
     requireFile("English Learning skill", path.join(config.skillDir, "SKILL.md")),
@@ -71,5 +89,19 @@ export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<
       ? [requireFile("VOICE_SOURCE_LEARNING_PATH", config.sourceLearningPath)]
       : [])
   ]);
+  const runtimeInfo = await stat(config.runtimeDir).catch(() => undefined);
+  if (runtimeInfo && !runtimeInfo.isDirectory()) throw new Error("VOICE_RUNTIME_DIR must be an accessible directory");
+  if (runtimeInfo && (runtimeInfo.mode & 0o077) !== 0) {
+    throw new Error("VOICE_RUNTIME_DIR must not grant group or world permissions");
+  }
+  const runtimeRealPath = await prospectiveRealPath(config.runtimeDir);
+  const protectedPaths = [await realpath(config.skillDir)];
+  if (config.sourceLearningPath) protectedPaths.push(await realpath(config.sourceLearningPath));
+  if (protectedPaths.some((protectedPath) =>
+    pathsOverlap(runtimeRealPath, protectedPath) || pathsOverlap(protectedPath, runtimeRealPath))) {
+    throw new Error("VOICE_RUNTIME_DIR must be separate from VOICE_SKILL_DIR and VOICE_SOURCE_LEARNING_PATH");
+  }
+  await mkdir(config.runtimeDir, { recursive: true, mode: 0o700 });
+  await requireDirectory("VOICE_RUNTIME_DIR", config.runtimeDir, true);
   return config;
 }
