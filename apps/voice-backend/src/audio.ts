@@ -74,7 +74,8 @@ export async function recognizeAudio(config: Config, wavPath: string, outputBase
   signal: AbortSignal, onOutcome: (outcome: string, durationMs: number) => void): Promise<string> {
   const started = Date.now();
   try {
-    await runProcess(config.whisperPath, ["-m", config.whisperModelPath, "-f", wavPath, "-otxt", "-of", outputBase],
+    await runProcess(config.whisperPath,
+      ["-m", config.whisperModelPath, "-l", "auto", "-f", wavPath, "-otxt", "-of", outputBase],
       { timeoutMs: config.transcriptionTimeoutMs ?? 120_000, signal });
     const transcript = (await readFile(`${outputBase}.txt`, "utf8")).trim();
     if (!transcript) throw new AudioError("empty_transcript", 422);

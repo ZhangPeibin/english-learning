@@ -6,7 +6,7 @@ This local, single-learner service accepts recorded speech and returns a transcr
 
 - Node.js 22 or later and npm.
 - FFmpeg. On macOS, install it with `brew install ffmpeg`. On Debian or Ubuntu, use `sudo apt install ffmpeg`.
-- `whisper-cli` from [whisper.cpp](https://github.com/ggerganov/whisper.cpp), plus a local model such as `ggml-base.en.bin`. Build or install whisper.cpp using its upstream instructions; model files are not included here.
+- `whisper-cli` from [whisper.cpp](https://github.com/ggerganov/whisper.cpp), plus a multilingual local model such as `ggml-base.bin`. Build or install whisper.cpp using its upstream instructions; model files are not included here.
 - An installed and authenticated Codex CLI. Run `codex login` as the operating-system account that will run this service.
 - A private, writable runtime directory outside the source checkout. Give only the service account access (for example, mode `0700`).
 
@@ -22,7 +22,7 @@ export VOICE_RUNTIME_DIR='/private/path/voice-tutor-runtime'
 export VOICE_SKILL_DIR='/absolute/path/english-learning'
 export VOICE_FFMPEG_PATH='/absolute/path/ffmpeg'
 export VOICE_WHISPER_PATH='/absolute/path/whisper-cli'
-export VOICE_WHISPER_MODEL_PATH='/private/path/ggml-base.en.bin'
+export VOICE_WHISPER_MODEL_PATH='/private/path/ggml-base.bin'
 export VOICE_CODEX_PATH='/absolute/path/codex'
 export VOICE_PORT='3000'
 ```
@@ -52,6 +52,8 @@ curl --fail --silent http://127.0.0.1:3000/health
 The process refuses startup unless its token, port, runtime and skill directories, schema/template files, executables, and Whisper model are usable. Consequently, a running process reports ready; failed prerequisites leave no listening service. Application endpoints under `/v1/` require `Authorization: Bearer <token>`.
 
 Stop a foreground process with `Ctrl-C`, or have the service manager send `SIGTERM`. FFmpeg, Whisper, and Codex calls are bounded to 30, 120, and 180 seconds respectively. A timeout terminates the child process and returns a retryable stage-specific error. Codex turns are never replayed automatically.
+
+Whisper automatically detects English and Chinese for every turn. Use a multilingual model; `.en` model files cannot recognize Chinese.
 
 ## Real stack smoke check
 

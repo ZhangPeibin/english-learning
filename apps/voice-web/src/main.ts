@@ -3,6 +3,7 @@ import {
   RotateCcw, Upload, Volume2, VolumeX, createIcons
 } from "lucide";
 import { ApiError, VoiceApi, type TurnResult } from "./api";
+import { speechSegments, type SpeechLanguage } from "./speech";
 import "./styles.css";
 
 const api = new VoiceApi();
@@ -86,10 +87,21 @@ function clearError() {
 function speak(text: string) {
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "en-US";
-  utterance.rate = 0.95;
-  window.speechSynthesis.speak(utterance);
+  const voices = window.speechSynthesis.getVoices();
+  for (const segment of speechSegments(text)) {
+    const utterance = new SpeechSynthesisUtterance(segment.text);
+    utterance.lang = segment.language;
+    utterance.rate = segment.language === "zh-CN" ? 1 : 0.95;
+    utterance.voice = voiceFor(voices, segment.language);
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+function voiceFor(voices: SpeechSynthesisVoice[], language: SpeechLanguage): SpeechSynthesisVoice | null {
+  const expected = language.toLowerCase();
+  return voices.find((voice) => voice.lang.toLowerCase() === expected)
+    ?? voices.find((voice) => voice.lang.toLowerCase().startsWith(expected.slice(0, 2)))
+    ?? null;
 }
 
 function addTurn(turn: TurnResult) {
