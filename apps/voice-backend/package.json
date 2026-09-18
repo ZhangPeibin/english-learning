@@ -4,9 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/src/server.js",
+    "start": "node --env-file=.env dist/src/server.js",
     "test": "vitest run",
-    "smoke": "npm run build && node scripts/smoke.mjs"
+    "smoke": "npm run build && node --env-file=.env scripts/smoke.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^9.2.1",
