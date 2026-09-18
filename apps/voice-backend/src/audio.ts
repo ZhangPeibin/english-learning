@@ -26,6 +26,16 @@ function dependencyError(stage: "normalization" | "transcription", error: unknow
   return new AudioError(`${stage}_${timedOut ? "timeout" : "failed"}`, 502, true);
 }
 
+function decodedDurationSeconds(stderr: string): number | undefined {
+  const progressTimes = [...stderr.matchAll(/^out_time_us=(\d+)\r?$/gm)];
+  const progressTime = progressTimes.at(-1)?.[1];
+  if (progressTime) return Number(progressTime) / 1_000_000;
+
+  const duration = /Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/.exec(stderr);
+  if (!duration) return undefined;
+  return Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3]);
+}
+
 export async function normalizeAudio(config: Config, sourcePath: string, normalizedPath: string,
   signal: AbortSignal, onOutcome: (outcome: string, durationMs: number) => void): Promise<void> {
   const started = Date.now();
@@ -38,15 +48,15 @@ export async function normalizeAudio(config: Config, sourcePath: string, normali
   try {
     let probe;
     try {
-      probe = await runProcess(config.ffmpegPath, ["-nostdin", "-i", sourcePath, "-f", "null", "-"],
+      probe = await runProcess(config.ffmpegPath,
+        ["-nostdin", "-i", sourcePath, "-progress", "pipe:2", "-nostats", "-f", "null", "-"],
         { timeoutMs: remainingTime(), signal });
     } catch (error) {
       if (error instanceof ProcessFailure && error.kind === "timeout") throw dependencyError("normalization", error);
       throw new AudioError("invalid_audio", 400);
     }
-    const duration = /Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/.exec(probe.stderr);
-    if (!duration) throw new AudioError("invalid_audio", 400);
-    const seconds = Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3]);
+    const seconds = decodedDurationSeconds(probe.stderr);
+    if (seconds === undefined) throw new AudioError("invalid_audio", 400);
     if (!Number.isFinite(seconds) || seconds <= 0) throw new AudioError("empty_audio", 400);
     if (seconds > 60) throw new AudioError("audio_too_long", 413);
     await runProcess(config.ffmpegPath, ["-nostdin", "-y", "-i", sourcePath, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", normalizedPath],

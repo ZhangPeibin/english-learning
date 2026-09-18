@@ -277,6 +277,31 @@ describe("voice tutor API", () => {
     await app.close();
   });
 
+  test("accepts a MediaRecorder WebM without container duration metadata", async () => {
+    const { config, ffmpegCallsPath } = await fixtureConfig();
+    await executable(config.ffmpegPath, `
+      const fs = require("node:fs");
+      const input = process.argv[process.argv.indexOf("-i") + 1];
+      fs.appendFileSync(${JSON.stringify(ffmpegCallsPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+      if (process.argv.at(-1) === "-") {
+        process.stderr.write("Duration: N/A\\nout_time_us=3000000\\nprogress=end\\n");
+      } else {
+        fs.copyFileSync(input, process.argv.at(-1));
+      }
+    `);
+    const app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    const boundary = "media-recorder-boundary";
+    const response = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: audioMultipart(boundary, "turn-media-recorder", "audio/webm;codecs=opus", "recording.webm", "webm-audio") });
+
+    expect(response.statusCode).toBe(200);
+    const calls = (await readFile(ffmpegCallsPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    expect(calls[0]).toEqual(expect.arrayContaining(["-progress", "pipe:2", "-nostats"]));
+    await app.close();
+  });
+
   test.each([
     ["missing_audio", undefined, "audio/wav", ""],
     ["empty_audio", "", "audio/wav", ""],
