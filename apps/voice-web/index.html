@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f7f5" />
+    <meta name="description" content="Private voice tutoring session" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>English Tutor</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand" aria-label="English Tutor">
+          <span class="brand-mark" aria-hidden="true"><i data-lucide="audio-lines"></i></span>
+          <span>
+            <strong>English Tutor</strong>
+            <small>Private session</small>
+          </span>
+        </div>
+        <div class="topbar-actions">
+          <span id="connection" class="connection" role="status">
+            <span class="status-dot"></span>
+            <span id="connection-label">Connecting</span>
+          </span>
+          <button id="new-session" class="icon-button" type="button" title="Start a new session" aria-label="Start a new session">
+            <i data-lucide="plus"></i>
+          </button>
+        </div>
+      </header>
+
+      <main id="conversation" class="conversation" aria-live="polite">
+        <section id="empty-state" class="empty-state">
+          <span class="empty-symbol" aria-hidden="true"><i data-lucide="message-circle"></i></span>
+          <h1>Ready when you are.</h1>
+          <p>Your next English conversation starts here.</p>
+        </section>
+        <div id="messages" class="messages"></div>
+      </main>
+
+      <section class="composer" aria-label="Voice controls">
+        <div id="error-banner" class="error-banner" role="alert" hidden>
+          <span id="error-message"></span>
+          <button id="retry" class="text-button" type="button" hidden>
+            <i data-lucide="rotate-ccw"></i>
+            Retry
+          </button>
+        </div>
+
+        <div class="voice-panel">
+          <div class="voice-meta">
+            <span id="recording-status">Ready</span>
+            <time id="recording-time">0:00</time>
+          </div>
+          <div id="waveform" class="waveform" aria-hidden="true"></div>
+          <div class="voice-actions">
+            <label class="icon-button upload-button" title="Choose an audio recording" aria-label="Choose an audio recording">
+              <i data-lucide="upload"></i>
+              <input id="audio-file" type="file" accept="audio/wav,audio/webm,audio/mp4,audio/m4a,audio/ogg,video/webm,video/mp4" />
+            </label>
+            <button id="record" class="record-button" type="button" aria-label="Start recording" title="Start recording">
+              <i data-lucide="mic"></i>
+            </button>
+            <button id="auto-speak" class="icon-button" type="button" aria-pressed="true" aria-label="Disable automatic speech" title="Disable automatic speech">
+              <i data-lucide="volume-2"></i>
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

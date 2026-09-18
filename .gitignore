@@ -6,3 +6,5 @@
 /apps/voice-backend/dist/
 /apps/voice-backend/.runtime/
 /apps/voice-backend/.env
+/apps/voice-web/node_modules/
+/apps/voice-web/dist/
