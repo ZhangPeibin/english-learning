@@ -1,9 +1,9 @@
 import {
-  AudioLines, CircleStop, LoaderCircle, MessageCircle, Mic, Plus,
-  RotateCcw, Upload, Volume2, VolumeX, createIcons
+  AudioLines, CircleStop, LoaderCircle, MessageCircle, Mic, Play, Plus,
+  RotateCcw, SlidersHorizontal, Upload, Volume2, VolumeX, createIcons
 } from "lucide";
 import { ApiError, VoiceApi, type TurnResult } from "./api";
-import { speechSegments, type SpeechLanguage } from "./speech";
+import { preferredVoice, speechSegments, voicesForLanguage, type SpeechLanguage } from "./speech";
 import "./styles.css";
 
 const api = new VoiceApi();
@@ -23,8 +23,14 @@ const errorMessage = byId<HTMLSpanElement>("error-message");
 const retryButton = byId<HTMLButtonElement>("retry");
 const connection = byId<HTMLSpanElement>("connection");
 const connectionLabel = byId<HTMLSpanElement>("connection-label");
+const voiceSettingsButton = byId<HTMLButtonElement>("voice-settings");
+const voiceMenu = byId<HTMLDivElement>("voice-menu");
+const englishVoice = byId<HTMLSelectElement>("english-voice");
+const chineseVoice = byId<HTMLSelectElement>("chinese-voice");
+const previewEnglish = byId<HTMLButtonElement>("preview-english");
+const previewChinese = byId<HTMLButtonElement>("preview-chinese");
 
-const icons = { AudioLines, CircleStop, LoaderCircle, MessageCircle, Mic, Plus, RotateCcw, Upload, Volume2, VolumeX };
+const icons = { AudioLines, CircleStop, LoaderCircle, MessageCircle, Mic, Play, Plus, RotateCcw, SlidersHorizontal, Upload, Volume2, VolumeX };
 const refreshIcons = () => createIcons({ icons });
 for (let index = 0; index < 36; index += 1) waveform.append(document.createElement("span"));
 
@@ -87,21 +93,46 @@ function clearError() {
 function speak(text: string) {
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
-  const voices = window.speechSynthesis.getVoices();
   for (const segment of speechSegments(text)) {
-    const utterance = new SpeechSynthesisUtterance(segment.text);
-    utterance.lang = segment.language;
-    utterance.rate = segment.language === "zh-CN" ? 1 : 0.95;
-    utterance.voice = voiceFor(voices, segment.language);
-    window.speechSynthesis.speak(utterance);
+    speakSegment(segment.text, segment.language);
   }
 }
 
-function voiceFor(voices: SpeechSynthesisVoice[], language: SpeechLanguage): SpeechSynthesisVoice | null {
-  const expected = language.toLowerCase();
-  return voices.find((voice) => voice.lang.toLowerCase() === expected)
-    ?? voices.find((voice) => voice.lang.toLowerCase().startsWith(expected.slice(0, 2)))
-    ?? null;
+function speakSegment(text: string, language: SpeechLanguage) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = language;
+  utterance.rate = language === "zh-CN" ? 0.95 : 0.9;
+  utterance.voice = preferredVoice(
+    window.speechSynthesis.getVoices(), language, localStorage.getItem(`voice-${language}`)
+  );
+  window.speechSynthesis.speak(utterance);
+}
+
+function populateVoiceSelect(select: HTMLSelectElement, language: SpeechLanguage) {
+  const voices = voicesForLanguage(window.speechSynthesis.getVoices(), language);
+  const selected = preferredVoice(voices, language, localStorage.getItem(`voice-${language}`));
+  select.replaceChildren(...voices.map((voice) => {
+    const option = document.createElement("option");
+    option.value = voice.name;
+    option.textContent = `${voice.name} (${voice.lang})`;
+    return option;
+  }));
+  if (selected) select.value = selected.name;
+  select.disabled = voices.length === 0;
+}
+
+function populateVoices() {
+  populateVoiceSelect(englishVoice, "en-US");
+  populateVoiceSelect(chineseVoice, "zh-CN");
+}
+
+function saveVoice(language: SpeechLanguage, select: HTMLSelectElement) {
+  localStorage.setItem(`voice-${language}`, select.value);
+}
+
+function previewVoice(text: string, language: SpeechLanguage) {
+  window.speechSynthesis.cancel();
+  speakSegment(text, language);
 }
 
 function addTurn(turn: TurnResult) {
@@ -315,6 +346,28 @@ autoSpeakButton.addEventListener("click", () => {
   updateAutoSpeak();
 });
 
+voiceSettingsButton.addEventListener("click", () => {
+  const opening = voiceMenu.hidden;
+  voiceMenu.hidden = !opening;
+  voiceSettingsButton.setAttribute("aria-expanded", String(opening));
+});
+document.addEventListener("click", (event) => {
+  if (voiceMenu.hidden || (event.target instanceof Element && event.target.closest(".voice-settings"))) return;
+  voiceMenu.hidden = true;
+  voiceSettingsButton.setAttribute("aria-expanded", "false");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  voiceMenu.hidden = true;
+  voiceSettingsButton.setAttribute("aria-expanded", "false");
+});
+englishVoice.addEventListener("change", () => saveVoice("en-US", englishVoice));
+chineseVoice.addEventListener("change", () => saveVoice("zh-CN", chineseVoice));
+previewEnglish.addEventListener("click", () => previewVoice("Let's practice English together.", "en-US"));
+previewChinese.addEventListener("click", () => previewVoice("我们一起练习英语。", "zh-CN"));
+window.speechSynthesis.addEventListener("voiceschanged", populateVoices);
+
 updateAutoSpeak();
+populateVoices();
 refreshIcons();
 void api.health().then(setConnection);

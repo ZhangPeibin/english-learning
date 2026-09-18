@@ -23,6 +23,28 @@
             <span class="status-dot"></span>
             <span id="connection-label">Connecting</span>
           </span>
+          <div class="voice-settings">
+            <button id="voice-settings" class="icon-button" type="button" title="Voice settings" aria-label="Voice settings" aria-expanded="false">
+              <i data-lucide="sliders-horizontal"></i>
+            </button>
+            <div id="voice-menu" class="voice-menu" role="dialog" aria-label="Voice settings" hidden>
+              <strong>Voices</strong>
+              <label for="english-voice">English</label>
+              <div class="voice-select-row">
+                <select id="english-voice" aria-label="English voice"></select>
+                <button id="preview-english" class="preview-button" type="button" title="Preview English voice" aria-label="Preview English voice">
+                  <i data-lucide="play"></i>
+                </button>
+              </div>
+              <label for="chinese-voice">中文</label>
+              <div class="voice-select-row">
+                <select id="chinese-voice" aria-label="Chinese voice"></select>
+                <button id="preview-chinese" class="preview-button" type="button" title="Preview Chinese voice" aria-label="Preview Chinese voice">
+                  <i data-lucide="play"></i>
+                </button>
+              </div>
+            </div>
+          </div>
           <button id="new-session" class="icon-button" type="button" title="Start a new session" aria-label="Start a new session">
             <i data-lucide="plus"></i>
           </button>

@@ -62,6 +62,52 @@ button:focus-visible, label:has(input:focus-visible) {
 .brand-mark { width: 34px; height: 34px; border-radius: 7px; }
 .brand-mark svg { width: 19px; }
 .topbar-actions { gap: 14px; }
+.voice-settings { position: relative; }
+
+.voice-menu {
+  position: absolute;
+  top: 46px;
+  right: 0;
+  width: 280px;
+  padding: 14px;
+  border: 1px solid #d9e1dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(24, 43, 36, 0.14);
+  display: grid;
+  gap: 8px;
+  z-index: 5;
+}
+
+.voice-menu[hidden] { display: none; }
+.voice-menu strong { font-size: 14px; margin-bottom: 2px; }
+.voice-menu label { color: #5c6b65; font-size: 11px; font-weight: 700; }
+.voice-select-row { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 8px; }
+.voice-select-row select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #d9e1dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #273630;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.preview-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d9e1dd;
+  border-radius: 6px;
+  background: #f7f9f8;
+  color: #0c7a6a;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.preview-button svg { width: 15px; height: 15px; }
 
 .connection {
   gap: 7px;
@@ -196,6 +242,8 @@ button:focus-visible, label:has(input:focus-visible) {
   #app { grid-template-rows: 62px minmax(0, 1fr) auto; }
   .topbar { padding-inline: 14px; }
   .connection span:last-child { display: none; }
+  .topbar-actions { gap: 8px; }
+  .voice-menu { right: -44px; width: min(280px, calc(100vw - 28px)); }
   .conversation { padding: 24px 14px 20px; }
   .message { width: 91%; }
   .composer { padding-inline: 14px; }
