@@ -197,6 +197,34 @@ describe("voice tutor API", () => {
     expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("existing learner progress\n");
     const persisted = JSON.parse(await readFile(path.join(config.runtimeDir, "sessions.json"), "utf8"));
     expect(persisted.sessions[sessionId]).toBeUndefined();
+    const historyText = await readFile(path.join(config.runtimeDir, "conversation-history.json"), "utf8");
+    const history = JSON.parse(historyText);
+    expect(history).toEqual({
+      version: 1,
+      conversations: [{
+        sessionId,
+        startedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        endedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        turns: [
+          {
+            turnId: "turn-one",
+            completedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+            transcript: "Hello tutor",
+            replyText: "Nice to hear you. What did you do today?"
+          },
+          {
+            turnId: "turn-two",
+            completedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+            transcript: "Hello tutor",
+            replyText: "Nice to hear you. What did you do today?"
+          }
+        ]
+      }]
+    });
+    expect(historyText).not.toContain("internal-thread-7");
+    expect(historyText).not.toContain(config.accessToken);
+    expect(historyText).not.toContain(config.runtimeDir);
+    expect((await stat(path.join(config.runtimeDir, "conversation-history.json"))).mode & 0o777).toBe(0o600);
     const gone = await app.inject({ method: "DELETE", url: `/v1/sessions/${sessionId}`, headers: auth });
     expect(gone.statusCode).toBe(404);
     await app.close();
@@ -249,11 +277,95 @@ describe("voice tutor API", () => {
     expect((await readdir(config.runtimeDir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
+  test("backfills a completed turn after an atomic history write failure", async () => {
+    const { config } = await fixtureConfig();
+    const store = new StateStore(config);
+    await store.initialize();
+    const sessionId = await store.createSession();
+    const historyPath = path.join(config.runtimeDir, "conversation-history.json");
+    await rm(historyPath);
+    await mkdir(historyPath);
+
+    await expect(store.completeTurn(sessionId, "private-thread", {
+      turnId: "turn-after-write-failure",
+      transcript: "Recorded learner text",
+      replyText: "Recorded tutor reply"
+    })).rejects.toThrow();
+    const completed = store.getSession(sessionId)?.completedTurns["turn-after-write-failure"];
+    expect(completed).toBeDefined();
+
+    await rm(historyPath, { recursive: true });
+    await store.ensureHistoryTurn(sessionId, completed!);
+    const historyText = await readFile(historyPath, "utf8");
+    expect(JSON.parse(historyText).conversations[0].turns).toHaveLength(1);
+    expect(historyText).not.toContain("private-thread");
+    expect((await readdir(config.runtimeDir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  test("does not restore cleared history when a completed turn is retried", async () => {
+    const { config, callsPath } = await fixtureConfig();
+    let app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    const boundary = "cleared-history-boundary";
+    const request = {
+      method: "POST" as const,
+      url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: wavMultipart(boundary, "turn-before-clear")
+    };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    await app.close();
+    await rm(path.join(config.runtimeDir, "conversation-history.json"));
+
+    app = await buildApp(config, { logger: false });
+    expect((await app.inject(request)).statusCode).toBe(200);
+    expect((await readFile(callsPath, "utf8")).trim().split("\n")).toHaveLength(1);
+    const history = JSON.parse(await readFile(path.join(config.runtimeDir, "conversation-history.json"), "utf8"));
+    expect(history.conversations).toEqual([]);
+    await app.close();
+  });
+
   test("initializes learner state from the template when no existing progress is present", async () => {
     const { config } = await fixtureConfig(false);
     const app = await buildApp(config, { logger: false });
     expect(await readFile(path.join(config.runtimeDir, "LEARNING.md"), "utf8")).toBe("template progress\n");
     await app.close();
+  });
+
+  test("starts history empty without migrating existing session turns", async () => {
+    const { config } = await fixtureConfig();
+    await mkdir(config.runtimeDir, { recursive: true });
+    await writeFile(path.join(config.runtimeDir, "sessions.json"), JSON.stringify({
+      sessions: {
+        "legacy-session": {
+          codexThreadId: "legacy-private-thread",
+          completedTurns: {
+            "legacy-turn": {
+              turnId: "legacy-turn",
+              transcript: "Legacy transcript",
+              replyText: "Legacy reply"
+            }
+          }
+        }
+      }
+    }));
+
+    const app = await buildApp(config, { logger: false });
+    const historyText = await readFile(path.join(config.runtimeDir, "conversation-history.json"), "utf8");
+    expect(JSON.parse(historyText)).toEqual({ version: 1, conversations: [] });
+    expect(historyText).not.toContain("legacy");
+    await app.close();
+  });
+
+  test("refuses startup with malformed conversation history without overwriting it", async () => {
+    const { config } = await fixtureConfig();
+    await mkdir(config.runtimeDir, { recursive: true });
+    const historyPath = path.join(config.runtimeDir, "conversation-history.json");
+    const malformed = '{"version":1,"unexpected":"private history content"}\n';
+    await writeFile(historyPath, malformed);
+
+    await expect(buildApp(config, { logger: false })).rejects.toThrow("Conversation history is invalid");
+    expect(await readFile(historyPath, "utf8")).toBe(malformed);
   });
 
   test.each([
@@ -388,6 +500,8 @@ describe("voice tutor API", () => {
       expect(logs).toContain('"outcome":"failed"');
       expect(logs).not.toContain("private codex diagnostic");
     }
+    const history = JSON.parse(await readFile(path.join(config.runtimeDir, "conversation-history.json"), "utf8"));
+    expect(history.conversations).toEqual([]);
     await app.close();
   });
 

@@ -71,7 +71,11 @@ A successful result contains non-empty `transcript` and `replyText` fields. This
 
 Uploaded and normalized temporary audio is deleted after every success or failure path. Backend logs contain request IDs, durations, dependency stages/outcomes, and safe error codes; they omit authorization values, raw audio, complete transcripts, complete replies, dependency diagnostics, and configured filesystem paths.
 
-`VOICE_RUNTIME_DIR` contains learner progress, application session mappings, and completed-turn results. Back it up as private learner data. Ending an application session preserves learner progress. The backend does not maintain a separate transcript archive, but resumable Codex sessions retain conversation history in the Codex CLI's local storage, and selected learning evidence can remain in `LEARNING.md`. Apply the same access and retention controls to both locations.
+`VOICE_RUNTIME_DIR` contains learner progress, application session mappings, completed-turn results, and durable conversation history. Back it up as private learner data. Ending an application session preserves learner progress and conversation history. Resumable Codex sessions also retain conversation history in the Codex CLI's local storage, and selected learning evidence can remain in `LEARNING.md`. Apply the same access and retention controls to both locations.
+
+The backend also writes confirmed conversation text to `conversation-history.json` in `VOICE_RUNTIME_DIR`. This mode-`0600` JSON file contains a schema version and chronologically ordered conversations with application session IDs, timestamps, learner transcripts, and tutor replies. It excludes raw audio, Codex thread IDs, tokens, commands, and local paths. Failed turns and turns completed before this feature was enabled are not added.
+
+To clear the retained history, stop the backend, delete `conversation-history.json`, and start the backend again. It recreates an empty file. There is no history API, web view, export, analysis, or automatic skill modification.
 
 ## Troubleshooting
 

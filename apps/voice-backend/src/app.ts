@@ -9,6 +9,8 @@ import { askTutor, TutorError } from "./tutor.js";
 import { AudioError, MAX_AUDIO_BYTES, audioExtension, normalizeAudio, recognizeAudio } from "./audio.js";
 
 const errorBody = (code: string, message: string, retryable = false) => ({ error: { code, message, retryable } });
+const turnResponse = ({ turnId, transcript, replyText }: { turnId: string; transcript: string; replyText: string }) =>
+  ({ turnId, transcript, replyText });
 
 export async function buildApp(config: Config, options: { logger?: FastifyServerOptions["logger"] } = {}) {
   const app = Fastify({ logger: options.logger ?? true });
@@ -62,7 +64,10 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       if (!turnId) throw new AudioError("missing_turn_id", 400);
       if (!sourcePath) throw new AudioError("missing_audio", 400);
       const completed = session.completedTurns[turnId];
-      if (completed) return completed;
+      if (completed) {
+        await state.ensureHistoryTurn(request.params.sessionId, completed);
+        return turnResponse(completed);
+      }
       if (activeSessions.has(request.params.sessionId)) {
         return reply.code(409).send(errorBody("session_busy", "Another turn is already in progress.", true));
       }
@@ -81,8 +86,8 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
         throw error;
       }
       const completedTurn = { turnId, transcript, replyText: result.replyText };
-      await state.completeTurn(request.params.sessionId, result.threadId, completedTurn);
-      return completedTurn;
+      const storedTurn = await state.completeTurn(request.params.sessionId, result.threadId, completedTurn);
+      return turnResponse(storedTurn);
     } catch (error) {
       let audioError: AudioError;
       if (error instanceof AudioError) audioError = error;
