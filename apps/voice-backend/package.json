@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke": "npm run build && node scripts/smoke.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^9.2.1",

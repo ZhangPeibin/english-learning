@@ -13,12 +13,23 @@ export interface Config {
   codexPath: string;
   normalizationTimeoutMs?: number;
   transcriptionTimeoutMs?: number;
+  codexTimeoutMs?: number;
 }
 
-async function requireFile(filePath: string, executable = false): Promise<void> {
+async function requireFile(label: string, filePath: string, executable = false): Promise<void> {
   const info = await stat(filePath).catch(() => undefined);
-  if (!info?.isFile()) throw new Error(`Required file is unavailable: ${path.basename(filePath)}`);
-  await access(filePath, executable ? 1 : 4);
+  if (!info?.isFile()) throw new Error(`${label} must be an accessible file (${path.basename(filePath)})`);
+  await access(filePath, executable ? 1 : 4).catch(() => {
+    throw new Error(`${label} is not ${executable ? "executable" : "readable"} (${path.basename(filePath)})`);
+  });
+}
+
+async function requireDirectory(label: string, directoryPath: string, writable = false): Promise<void> {
+  const info = await stat(directoryPath).catch(() => undefined);
+  if (!info?.isDirectory()) throw new Error(`${label} must be an accessible directory`);
+  await access(directoryPath, writable ? 6 : 4).catch(() => {
+    throw new Error(`${label} is not ${writable ? "readable and writable" : "readable"}`);
+  });
 }
 
 export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<Config> {
@@ -46,14 +57,19 @@ export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<
     codexPath: required("VOICE_CODEX_PATH")
   };
   await mkdir(config.runtimeDir, { recursive: true, mode: 0o700 });
+  await requireDirectory("VOICE_RUNTIME_DIR", config.runtimeDir, true);
+  await requireDirectory("VOICE_SKILL_DIR", config.skillDir);
   await Promise.all([
-    requireFile(path.join(config.skillDir, "SKILL.md")),
-    requireFile(path.join(config.skillDir, "templates", "LEARNING.md")),
-    requireFile(path.join(config.skillDir, "apps", "voice-backend", "reply-schema.json")),
-    requireFile(config.ffmpegPath, true),
-    requireFile(config.whisperPath, true),
-    requireFile(config.whisperModelPath),
-    requireFile(config.codexPath, true)
+    requireFile("English Learning skill", path.join(config.skillDir, "SKILL.md")),
+    requireFile("learner-state template", path.join(config.skillDir, "templates", "LEARNING.md")),
+    requireFile("tutor reply schema", path.join(config.skillDir, "apps", "voice-backend", "reply-schema.json")),
+    requireFile("VOICE_FFMPEG_PATH", config.ffmpegPath, true),
+    requireFile("VOICE_WHISPER_PATH", config.whisperPath, true),
+    requireFile("VOICE_WHISPER_MODEL_PATH", config.whisperModelPath),
+    requireFile("VOICE_CODEX_PATH", config.codexPath, true),
+    ...(config.sourceLearningPath
+      ? [requireFile("VOICE_SOURCE_LEARNING_PATH", config.sourceLearningPath)]
+      : [])
   ]);
   return config;
 }

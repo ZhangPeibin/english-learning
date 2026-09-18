@@ -5,7 +5,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "./config.js";
 import { StateStore } from "./state.js";
-import { askTutor } from "./tutor.js";
+import { askTutor, TutorError } from "./tutor.js";
 import { AudioError, MAX_AUDIO_BYTES, audioExtension, normalizeAudio, recognizeAudio } from "./audio.js";
 
 const errorBody = (code: string, message: string, retryable = false) => ({ error: { code, message, retryable } });
@@ -74,7 +74,7 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       const codexStarted = Date.now();
       let result;
       try {
-        result = await askTutor(config, transcript, session.codexThreadId);
+        result = await askTutor(config, transcript, session.codexThreadId, abortController.signal);
         dependencyOutcome("codex")("success", Date.now() - codexStarted);
       } catch (error) {
         dependencyOutcome("codex")("failed", Date.now() - codexStarted);
@@ -86,6 +86,7 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
     } catch (error) {
       let audioError: AudioError;
       if (error instanceof AudioError) audioError = error;
+      else if (error instanceof TutorError) audioError = new AudioError(error.code, 502, true);
       else if (error instanceof app.multipartErrors.RequestFileTooLargeError) audioError = new AudioError("audio_too_large", 413);
       else audioError = new AudioError("dependency_failed", 502, true);
       request.log.warn({ requestId: request.id, errorCode: audioError.code, durationMs: Date.now() - requestStarted }, "voice turn failed");
@@ -102,6 +103,9 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
         normalization_failed: "The recording could not be processed.",
         transcription_timeout: "Speech recognition timed out.",
         transcription_failed: "Speech recognition failed.",
+        codex_timeout: "The tutor timed out.",
+        codex_failed: "The tutor service failed.",
+        codex_invalid_response: "The tutor returned an invalid response.",
         dependency_failed: "The voice turn could not be completed."
       };
       reply.code(audioError.statusCode);

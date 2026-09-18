@@ -306,7 +306,9 @@ describe("voice tutor API", () => {
     ["transcription_failed", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-fail"],
     ["empty_transcript", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-empty"],
     ["transcription_timeout", "process.stderr.write('Duration: 00:00:01.00\\n')", "whisper-timeout"],
-    ["dependency_failed", "process.stderr.write('Duration: 00:00:01.00\\n')", "codex-fail"]
+    ["codex_failed", "process.stderr.write('Duration: 00:00:01.00\\n')", "codex-fail"],
+    ["codex_invalid_response", "process.stderr.write('Duration: 00:00:01.00\\n')", "codex-invalid"],
+    ["codex_timeout", "process.stderr.write('Duration: 00:00:01.00\\n')", "codex-timeout"]
   ])("maps and cleans the %s terminal path", async (code, probeBehavior, whisperBehavior) => {
     const { config, ffmpegCallsPath } = await fixtureConfig();
     config.normalizationTimeoutMs = 1_000;
@@ -329,6 +331,11 @@ describe("voice tutor API", () => {
       process.stderr.write("private codex diagnostic");
       process.exit(1);
     `);
+    if (whisperBehavior === "codex-invalid") await executable(config.codexPath, `process.stdout.write("not-json\\n");`);
+    if (whisperBehavior === "codex-timeout") {
+      config.codexTimeoutMs = 50;
+      await executable(config.codexPath, `process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000);`);
+    }
     const logLines: string[] = [];
     const app = await buildApp(config, { logger: { level: "info", stream: { write: (line: string) => logLines.push(line) } } });
     const { sessionId, auth } = await session(app, config);
@@ -351,7 +358,7 @@ describe("voice tutor API", () => {
     expect(logs).not.toContain("private raw audio");
     expect(logs).not.toContain("private diagnostic");
     expect(logs).not.toContain(config.runtimeDir);
-    if (whisperBehavior === "codex-fail") {
+    if (whisperBehavior?.startsWith("codex-")) {
       expect(logs).toContain('"stage":"codex"');
       expect(logs).toContain('"outcome":"failed"');
       expect(logs).not.toContain("private codex diagnostic");
