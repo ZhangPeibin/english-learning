@@ -1,6 +1,10 @@
 # Voice Web
 
-Local browser client for the voice tutor backend. It records or uploads one utterance per turn, displays the recognized transcript and tutor reply, and speaks English and Chinese reply segments with matching browser voices.
+Local browser client for the voice tutor backend. It accepts typed messages or
+one recorded/uploaded utterance per turn, displays the learner text and tutor
+reply, and speaks English and Chinese reply segments with matching browser
+voices. Typed turns stay silent unless the learner presses the reply's play
+button.
 
 The Vite proxy reads `VOICE_ACCESS_TOKEN` from `../voice-backend/.env` and injects it server-side. The token is not included in the browser bundle.
 

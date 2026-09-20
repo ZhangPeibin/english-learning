@@ -118,6 +118,7 @@ describe("voice tutor API", () => {
     const protectedRequests = [
       { method: "POST" as const, url: "/v1/sessions" },
       { method: "POST" as const, url: "/v1/sessions/test-session/turns" },
+      { method: "POST" as const, url: "/v1/sessions/test-session/text-turns" },
       { method: "DELETE" as const, url: "/v1/sessions/test-session" }
     ];
     for (const request of protectedRequests) {
@@ -251,6 +252,11 @@ describe("voice tutor API", () => {
     const first = app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
       headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` }, payload: wavMultipart(boundary, "turn-first") });
     await waitForFile(startedPath);
+    const textTurn = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/text-turns`,
+      headers: { ...auth, "content-type": "application/json" },
+      payload: { turnId: "turn-text-overlap", text: "Do not reorder this text." } });
+    expect(textTurn.statusCode).toBe(409);
+    expect(textTurn.json().error).toMatchObject({ code: "session_busy", retryable: true });
     const second = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
       headers: { ...auth, "content-type": `multipart/form-data; boundary=${boundary}` }, payload: wavMultipart(boundary, "turn-second") });
     expect(second.statusCode).toBe(409);
@@ -259,6 +265,70 @@ describe("voice tutor API", () => {
     expect((await readFile(ffmpegCallsPath, "utf8")).trim().split("\n")).toHaveLength(2);
     await writeFile(releasePath, "release");
     expect((await first).statusCode).toBe(200);
+    await app.close();
+  });
+
+  test("completes and deduplicates a text turn without audio dependencies", async () => {
+    const { config, callsPath, ffmpegCallsPath } = await fixtureConfig();
+    const app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    const request = {
+      method: "POST" as const,
+      url: `/v1/sessions/${sessionId}/text-turns`,
+      headers: { ...auth, "content-type": "application/json" },
+      payload: { turnId: "text-turn-one", text: "I want to learn the letter A." }
+    };
+
+    const first = await app.inject(request);
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual({
+      turnId: "text-turn-one",
+      transcript: "I want to learn the letter A.",
+      replyText: "Nice to hear you. What did you do today?"
+    });
+    expect((await app.inject(request)).json()).toEqual(first.json());
+    expect((await readFile(callsPath, "utf8")).trim().split("\n")).toHaveLength(1);
+    expect(await missing(ffmpegCallsPath)).toBe(true);
+    const history = JSON.parse(await readFile(path.join(config.runtimeDir, "conversation-history.json"), "utf8"));
+    expect(history.conversations[0].turns[0].transcript).toBe("I want to learn the letter A.");
+    await app.close();
+  });
+
+  test.each([
+    [{ turnId: "turn-empty", text: "   " }, 400, "invalid_text_turn"],
+    [{ turnId: "turn-large", text: "a".repeat(4_001) }, 413, "text_too_large"]
+  ])("rejects an invalid text turn before Codex", async (payload, statusCode, code) => {
+    const { config, callsPath } = await fixtureConfig();
+    const app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    const response = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/text-turns`,
+      headers: { ...auth, "content-type": "application/json" }, payload });
+
+    expect(response.statusCode).toBe(statusCode);
+    expect(response.json().error).toMatchObject({ code, retryable: false });
+    expect(await missing(callsPath)).toBe(true);
+    await app.close();
+  });
+
+  test("keeps text content private when Codex fails", async () => {
+    const { config } = await fixtureConfig();
+    await executable(config.codexPath, `
+      process.stderr.write("private dependency diagnostic");
+      process.exit(1);
+    `);
+    const logs: string[] = [];
+    const app = await buildApp(config, { logger: { level: "info", stream: { write: (line: string) => logs.push(line) } } });
+    const { sessionId, auth } = await session(app, config);
+    const privateText = "private learner text that must not be logged";
+    const response = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/text-turns`,
+      headers: { ...auth, "content-type": "application/json" },
+      payload: { turnId: "private-text-turn", text: privateText } });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toMatchObject({ code: "codex_failed", retryable: true });
+    expect(response.body).not.toContain(privateText);
+    expect(logs.join("")).not.toContain(privateText);
+    expect(logs.join("")).not.toContain("private dependency diagnostic");
     await app.close();
   });
 

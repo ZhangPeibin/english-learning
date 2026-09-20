@@ -36,6 +36,66 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
     return reply.code(204).send();
   });
 
+  app.post<{
+    Params: { sessionId: string };
+    Body: { turnId?: unknown; text?: unknown };
+  }>("/v1/sessions/:sessionId/text-turns", async (request, reply) => {
+    const requestStarted = Date.now();
+    const session = state.getSession(request.params.sessionId);
+    if (!session) return reply.code(404).send(errorBody("session_not_found", "Session not found."));
+    const turnId = typeof request.body?.turnId === "string" ? request.body.turnId.trim() : "";
+    const transcript = typeof request.body?.text === "string" ? request.body.text.trim() : "";
+    if (!turnId || !transcript) {
+      return reply.code(400).send(errorBody("invalid_text_turn", "turnId and text are required."));
+    }
+    if (transcript.length > 4_000) {
+      return reply.code(413).send(errorBody("text_too_large", "Text exceeds the 4,000 character limit."));
+    }
+    const completed = session.completedTurns[turnId];
+    if (completed) {
+      await state.ensureHistoryTurn(request.params.sessionId, completed);
+      return turnResponse(completed);
+    }
+    if (activeSessions.has(request.params.sessionId)) {
+      return reply.code(409).send(errorBody("session_busy", "Another turn is already in progress.", true));
+    }
+    const abortController = new AbortController();
+    request.raw.once("aborted", () => abortController.abort());
+    activeSessions.add(request.params.sessionId);
+    try {
+      const codexStarted = Date.now();
+      let result;
+      try {
+        result = await askTutor(config, transcript, session.codexThreadId, abortController.signal);
+        request.log.info({ requestId: request.id, stage: "codex", outcome: "success",
+          durationMs: Date.now() - codexStarted }, "dependency completed");
+      } catch (error) {
+        request.log.info({ requestId: request.id, stage: "codex", outcome: "failed",
+          durationMs: Date.now() - codexStarted }, "dependency completed");
+        throw error;
+      }
+      const stored = await state.completeTurn(request.params.sessionId, result.threadId,
+        { turnId, transcript, replyText: result.replyText });
+      return turnResponse(stored);
+    } catch (error) {
+      const tutorError = error instanceof TutorError
+        ? error
+        : new TutorError("codex_failed");
+      const messages: Record<string, string> = {
+        codex_timeout: "The tutor timed out.",
+        codex_failed: "The tutor service failed.",
+        codex_invalid_response: "The tutor returned an invalid response."
+      };
+      request.log.warn({ requestId: request.id, errorCode: tutorError.code,
+        durationMs: Date.now() - requestStarted }, "text turn failed");
+      return reply.code(502).send(errorBody(tutorError.code,
+        messages[tutorError.code] ?? "The tutor service failed.", true));
+    } finally {
+      activeSessions.delete(request.params.sessionId);
+      request.log.info({ requestId: request.id, durationMs: Date.now() - requestStarted }, "text turn completed");
+    }
+  });
+
   app.post<{ Params: { sessionId: string } }>("/v1/sessions/:sessionId/turns", async (request, reply) => {
     const requestStarted = Date.now();
     const session = state.getSession(request.params.sessionId);

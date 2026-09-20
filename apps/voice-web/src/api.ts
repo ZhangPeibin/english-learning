@@ -54,6 +54,15 @@ export class VoiceApi {
     return this.read<TurnResult>(response);
   }
 
+  async submitText(sessionId: string, turnId: string, text: string): Promise<TurnResult> {
+    const response = await fetch(`${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/text-turns`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ turnId, text })
+    });
+    return this.read<TurnResult>(response);
+  }
+
   private async read<T>(response: Response): Promise<T> {
     let body: T & ErrorEnvelope;
     try {

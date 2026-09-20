@@ -1,6 +1,6 @@
 import {
   AudioLines, CircleStop, LoaderCircle, MessageCircle, Mic, Play, Plus,
-  RotateCcw, SlidersHorizontal, Upload, Volume2, VolumeX, createIcons
+  RotateCcw, SendHorizontal, SlidersHorizontal, Upload, Volume2, VolumeX, createIcons
 } from "lucide";
 import { ApiError, VoiceApi, type TurnResult } from "./api";
 import { preferredVoice, speechSegments, voicesForLanguage, type SpeechLanguage } from "./speech";
@@ -29,12 +29,17 @@ const englishVoice = byId<HTMLSelectElement>("english-voice");
 const chineseVoice = byId<HTMLSelectElement>("chinese-voice");
 const previewEnglish = byId<HTMLButtonElement>("preview-english");
 const previewChinese = byId<HTMLButtonElement>("preview-chinese");
+const textForm = byId<HTMLFormElement>("text-form");
+const textInput = byId<HTMLTextAreaElement>("text-input");
+const sendTextButton = byId<HTMLButtonElement>("send-text");
 
-const icons = { AudioLines, CircleStop, LoaderCircle, MessageCircle, Mic, Play, Plus, RotateCcw, SlidersHorizontal, Upload, Volume2, VolumeX };
+const icons = { AudioLines, CircleStop, LoaderCircle, MessageCircle, Mic, Play, Plus, RotateCcw, SendHorizontal, SlidersHorizontal, Upload, Volume2, VolumeX };
 const refreshIcons = () => createIcons({ icons });
 for (let index = 0; index < 36; index += 1) waveform.append(document.createElement("span"));
 
-interface PendingTurn { audio: Blob; filename: string; turnId: string }
+type PendingTurn =
+  | { kind: "audio"; audio: Blob; filename: string; turnId: string }
+  | { kind: "text"; text: string; turnId: string };
 
 let sessionId = sessionStorage.getItem("voice-session-id");
 let recorder: MediaRecorder | null = null;
@@ -59,6 +64,8 @@ function setBusy(value: boolean, label = "Ready") {
   busy = value;
   recordButton.disabled = value;
   fileInput.disabled = value;
+  textInput.disabled = value;
+  sendTextButton.disabled = value || !textInput.value.trim();
   newSessionButton.disabled = value;
   recordingStatus.textContent = label;
   recordButton.classList.toggle("processing", value);
@@ -177,6 +184,8 @@ function errorCopy(error: unknown): string {
     empty_transcript: "No speech was recognized.",
     normalization_timeout: "Audio processing took too long.",
     transcription_timeout: "Speech recognition took too long.",
+    invalid_text_turn: "Enter a message before sending.",
+    text_too_large: "That message is longer than 4,000 characters.",
     codex_timeout: "The tutor took too long to reply.",
     unauthorized: "The local access token is not accepted."
   };
@@ -192,17 +201,21 @@ async function sendTurn(turn: PendingTurn) {
     let activeSession = await ensureSession();
     let result: TurnResult;
     try {
-      result = await api.submitTurn(activeSession, turn.turnId, turn.audio, turn.filename);
+      result = turn.kind === "audio"
+        ? await api.submitTurn(activeSession, turn.turnId, turn.audio, turn.filename)
+        : await api.submitText(activeSession, turn.turnId, turn.text);
     } catch (error) {
       if (!(error instanceof ApiError) || error.code !== "session_not_found") throw error;
       sessionId = null;
       sessionStorage.removeItem("voice-session-id");
       activeSession = await ensureSession();
-      result = await api.submitTurn(activeSession, turn.turnId, turn.audio, turn.filename);
+      result = turn.kind === "audio"
+        ? await api.submitTurn(activeSession, turn.turnId, turn.audio, turn.filename)
+        : await api.submitText(activeSession, turn.turnId, turn.text);
     }
     pendingTurn = null;
     addTurn(result);
-    if (autoSpeak) speak(result.replyText);
+    if (turn.kind === "audio" && autoSpeak) speak(result.replyText);
   } catch (error) {
     const canRetry = !(error instanceof ApiError) || error.retryable;
     showError(errorCopy(error), canRetry);
@@ -283,7 +296,7 @@ async function startRecording() {
       recordButton.title = "Start recording";
       recordingStatus.textContent = "Ready";
       refreshIcons();
-      if (audio.size) void sendTurn({ audio, filename: `recording.${extensionFor(type)}`, turnId: crypto.randomUUID() });
+      if (audio.size) void sendTurn({ kind: "audio", audio, filename: `recording.${extensionFor(type)}`, turnId: crypto.randomUUID() });
       else showError("No audio was recorded.", false);
     });
 
@@ -318,7 +331,32 @@ fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   fileInput.value = "";
   if (!file) return;
-  void sendTurn({ audio: file, filename: file.name, turnId: crypto.randomUUID() });
+  void sendTurn({ kind: "audio", audio: file, filename: file.name, turnId: crypto.randomUUID() });
+});
+
+function resizeTextInput() {
+  textInput.style.height = "auto";
+  textInput.style.height = `${Math.min(textInput.scrollHeight, 120)}px`;
+  sendTextButton.disabled = busy || !textInput.value.trim();
+}
+
+function submitText() {
+  const text = textInput.value.trim();
+  if (!text || busy) return;
+  textInput.value = "";
+  resizeTextInput();
+  void sendTurn({ kind: "text", text, turnId: crypto.randomUUID() });
+}
+
+textForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  submitText();
+});
+textInput.addEventListener("input", resizeTextInput);
+textInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  submitText();
 });
 
 retryButton.addEventListener("click", () => {
@@ -334,6 +372,8 @@ newSessionButton.addEventListener("click", async () => {
   sessionStorage.removeItem("voice-session-id");
   messages.replaceChildren();
   emptyState.hidden = false;
+  textInput.value = "";
+  resizeTextInput();
   if (oldSession) {
     try { await api.deleteSession(oldSession); } catch { /* A new local session can still start. */ }
   }

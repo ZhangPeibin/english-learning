@@ -1,6 +1,9 @@
 # Voice Tutor Backend
 
-This local, single-learner service accepts recorded speech and returns a transcript plus a text tutor reply. Clients own speech synthesis. It binds to `127.0.0.1`; place a separately secured gateway in front of it only after reviewing the deployment warning below.
+This local, single-learner service accepts recorded speech or typed text and
+returns learner text plus a text tutor reply. Clients own speech synthesis. It
+binds to `127.0.0.1`; place a separately secured gateway in front of it only
+after reviewing the deployment warning below.
 
 ## Host prerequisites
 
@@ -50,6 +53,13 @@ curl --fail --silent http://127.0.0.1:3000/health
 ```
 
 The process refuses startup unless its token, port, runtime and skill directories, schema/template files, executables, and Whisper model are usable. Consequently, a running process reports ready; failed prerequisites leave no listening service. Application endpoints under `/v1/` require `Authorization: Bearer <token>`.
+
+Create a session with `POST /v1/sessions`. Submit audio as multipart data to
+`POST /v1/sessions/:sessionId/turns`, or submit typed input as JSON
+`{"turnId":"...","text":"..."}` to
+`POST /v1/sessions/:sessionId/text-turns`. Typed text is limited to 4,000
+characters and bypasses FFmpeg and Whisper while sharing the same Codex
+conversation, turn idempotency, concurrency lock, and private history.
 
 Stop a foreground process with `Ctrl-C`, or have the service manager send `SIGTERM`. FFmpeg, Whisper, and Codex calls are bounded to 30, 120, and 180 seconds respectively. A timeout terminates the child process and returns a retryable stage-specific error. Codex turns are never replayed automatically.
 

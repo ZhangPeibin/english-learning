@@ -60,7 +60,7 @@
         <div id="messages" class="messages"></div>
       </main>
 
-      <section class="composer" aria-label="Voice controls">
+      <section class="composer" aria-label="Tutor input">
         <div id="error-banner" class="error-banner" role="alert" hidden>
           <span id="error-message"></span>
           <button id="retry" class="text-button" type="button" hidden>
@@ -68,6 +68,14 @@
             Retry
           </button>
         </div>
+
+        <form id="text-form" class="text-composer">
+          <label class="sr-only" for="text-input">Type a message</label>
+          <textarea id="text-input" rows="1" maxlength="4000" placeholder="Type a message..." aria-label="Type a message"></textarea>
+          <button id="send-text" class="send-button" type="submit" aria-label="Send message" title="Send message" disabled>
+            <i data-lucide="send-horizontal"></i>
+          </button>
+        </form>
 
         <div class="voice-panel">
           <div class="voice-meta">

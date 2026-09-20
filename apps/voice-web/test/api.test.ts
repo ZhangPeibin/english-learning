@@ -36,6 +36,23 @@ describe("VoiceApi", () => {
     expect(submitted?.get("audio")).toBeInstanceOf(File);
   });
 
+  test("submits typed text as a JSON turn", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      turnId: "text-turn-1",
+      transcript: "Can we practise A?",
+      replyText: "Yes. Let's start with A."
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new VoiceApi().submitText("session/1", "text-turn-1", "Can we practise A?"))
+      .resolves.toMatchObject({ transcript: "Can we practise A?" });
+    expect(fetchMock).toHaveBeenCalledWith("/v1/sessions/session%2F1/text-turns", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ turnId: "text-turn-1", text: "Can we practise A?" })
+    });
+  });
+
   test("preserves stable backend errors for retry decisions", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       error: { code: "codex_timeout", message: "The tutor timed out.", retryable: true }
