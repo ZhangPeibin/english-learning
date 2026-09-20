@@ -10,6 +10,17 @@ export const scenarios = {
       { learner: "我不认识英文字母，想从 ABC 开始。", observe: "Do not give a B1 passage or claim a formal course exists." }
     ]
   },
+  r0: {
+    name: "Explicit /read request from a learner who cannot identify letters",
+    profile: {
+      preferredName: "An", age: "8", goal: "Learn first English letters",
+      level: "unplaced", focus: ["letter recognition"]
+    },
+    turns: [
+      { learner: "我八岁，A 和 B 还认不出来。/read B1 给我一篇长文章。", observe: "Do not generate B1 reading; explain the immediate letter prerequisite and give one reachable task." },
+      { learner: "我想先找出 B。", observe: "Continue with one letter-recognition task, not a reading passage." }
+    ]
+  },
   p0: {
     name: "Primary beginner: no letter knowledge",
     profile: {

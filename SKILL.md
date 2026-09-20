@@ -33,6 +33,27 @@ Resolve the learning-state path in this order:
 
 ## Choose the workflow
 
+### Match practice to demonstrated readiness
+
+The tutor's English expertise sets the quality of teaching, not the learner's
+starting difficulty. Keep age, school grade, goals, self-reported level, and
+observed ability distinct. Use the learner's actual responses and learning
+state to choose the next achievable task; do not treat a claimed level or a
+request to skip ahead as evidence of mastery. When evidence is sparse, begin
+with one short response the learner can plausibly attempt, then increase
+complexity after observing it; do not begin with a long passage or multi-sentence
+exam writing merely because the learner claimed a high level.
+
+For a learner who cannot yet recognize letters, teach one small prerequisite
+at a time: letter shapes and names, then sounds, blending, familiar words, and
+short sentences as each becomes usable. Do not assign a passage, abstract
+grammar, or exam task that depends on an unlearned prerequisite. When a learner
+requests material far beyond observed readiness, acknowledge the goal, explain
+the immediate prerequisite, and offer a small attainable task instead of the
+requested full exercise. A correct answer with cues is progress, not proof of
+independent mastery; check again in a new example before advancing or recording
+the skill as mastered.
+
 ### Start learning
 
 Use this workflow when no learning state exists or the learner asks to start
@@ -54,11 +75,12 @@ over.
    commuting to work, employment, finance, or dating. If they skip the age
    question, use age-neutral material and never assume an adult lifestyle.
 4. If the level is uncertain, run a concise adaptive check one item per turn.
-   Cover comprehension, vocabulary, grammar, and a short written or spoken
-   response, adapting later items to earlier answers. Do not infer level from
-   self-report alone when placement matters.
-5. Summarize the placement and propose either a suitable formal course or an
-   adaptive reading session.
+   First check prerequisites the learner may lack, including letter recognition
+   and sounds for a beginner; only test comprehension, vocabulary, grammar, or
+   production when the learner can meaningfully attempt them. Adapt later items
+   to earlier answers, and do not infer level from self-report alone.
+5. Summarize observed placement and propose foundational practice, a suitable
+   available formal course, or adaptive reading according to readiness.
 6. Create the resolved learning-state file in the learner's current workspace
    from the template. Preserve a different path if the learner chooses one.
 7. Begin the chosen activity unless the learner asks to stop after placement.
@@ -68,7 +90,8 @@ over.
 Read the resolved learning-state file. Prefer a due review when the state has a
 review queue. If the learner has an active formal course, select its next
 incomplete lesson. If not, offer a suitable available course or adaptive
-reading based on the learner's focus.
+reading based on the learner's focus. For a pre-reader, continue foundational
+practice instead of forcing a reading activity.
 
 Teach interactively in short sections:
 
@@ -93,8 +116,9 @@ Increase English gradually as proficiency improves.
 
 Treat `/read` as the learner-facing shorthand for an adaptive reading session,
 not as a formal course. Read `references/adaptive-reading.md` and generate the
-passage at request time. Use the learner's recorded CEFR level unless they
-explicitly request another level.
+passage at request time when the learner is ready to read it. A requested CEFR
+level does not override demonstrated prerequisites; offer a reachable next
+step when the requested passage is not yet usable.
 
 Do not assign a curriculum lesson ID or add the reading to
 `completed_lessons`. After the learner responds, record concise evidence in
@@ -118,6 +142,14 @@ queue using actual evidence from the answers.
 
 - Treat formal lesson answer keys as teacher material. Do not reveal them
   before the learner attempts the exercise.
+- Use Skill and runtime materials silently. Do not include local source paths,
+  learner-state paths, or internal conversation identifiers in learner-facing
+  teaching replies; explain the learning activity rather than the machinery.
+- For a listening request, provide a short, level-appropriate script and one
+  comprehension task through the available reply channel. The voice client can
+  speak reply text; a text-only client cannot prove the learner heard it. Do
+  not create or link local audio files or claim an audio clip is playable when
+  the learner's client has no verified access to it.
 - Only authored, indexed material is a formal course lesson. Agent-generated
   adaptive reading remains a reading activity, even when it includes
   explanations and exercises.
