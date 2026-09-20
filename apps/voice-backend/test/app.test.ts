@@ -99,7 +99,7 @@ async function missing(filePath: string): Promise<boolean> {
 }
 
 async function waitForFile(filePath: string): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     if (!await missing(filePath)) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }

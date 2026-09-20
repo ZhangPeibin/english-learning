@@ -27,12 +27,19 @@ export VOICE_FFMPEG_PATH='/absolute/path/ffmpeg'
 export VOICE_WHISPER_PATH='/absolute/path/whisper-cli'
 export VOICE_WHISPER_MODEL_PATH='/private/path/ggml-base.bin'
 export VOICE_CODEX_PATH='/absolute/path/codex'
+export VOICE_CODEX_TRANSPORT='app-server'
 export VOICE_PORT='3000'
 ```
 
 `VOICE_SOURCE_LEARNING_PATH` is optional. When set, it must be a readable learner-state file and initializes runtime progress on first startup. Otherwise the backend uses `VOICE_SKILL_DIR/LEARNING.md` when present, then the bundled template. Runtime progress is authoritative after initialization.
 
 Keep the token out of shell history, source control, service definitions readable by other users, and logs. A host secret manager or a mode-`0600` environment file loaded by the service manager is preferable.
+
+`VOICE_CODEX_TRANSPORT` defaults to `exec`. Set it to `app-server` to keep one
+experimental Codex app-server process alive and send multiple turns through it.
+If app-server initialization fails before a turn starts, the backend safely
+falls back to `codex exec`. It never automatically replays a turn after
+`turn/start`, because an ambiguous retry could advance the conversation twice.
 
 ## Start, check, and stop
 
@@ -61,7 +68,12 @@ Create a session with `POST /v1/sessions`. Submit audio as multipart data to
 characters and bypasses FFmpeg and Whisper while sharing the same Codex
 conversation, turn idempotency, concurrency lock, and private history.
 
-Stop a foreground process with `Ctrl-C`, or have the service manager send `SIGTERM`. FFmpeg, Whisper, and Codex calls are bounded to 30, 120, and 180 seconds respectively. A timeout terminates the child process and returns a retryable stage-specific error. Codex turns are never replayed automatically.
+Stop a foreground process with `Ctrl-C`, or have the service manager send
+`SIGTERM`. FFmpeg, Whisper, and Codex calls are bounded to 30, 120, and 180
+seconds respectively. A timeout terminates or interrupts the active child turn
+and returns a retryable stage-specific error. Codex turns are never replayed
+automatically. App-server reduces repeated CLI startup cost, but remote model
+inference can still take tens of seconds.
 
 Whisper automatically detects English and Chinese for every turn. Use a multilingual model; `.en` model files cannot recognize Chinese.
 

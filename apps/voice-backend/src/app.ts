@@ -5,7 +5,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import type { Config } from "./config.js";
 import { StateStore } from "./state.js";
-import { askTutor, TutorError } from "./tutor.js";
+import { createTutor, TutorError } from "./tutor.js";
 import { AudioError, MAX_AUDIO_BYTES, audioExtension, normalizeAudio, recognizeAudio } from "./audio.js";
 
 const errorBody = (code: string, message: string, retryable = false) => ({ error: { code, message, retryable } });
@@ -17,7 +17,10 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
   const state = new StateStore(config);
   const activeSessions = new Set<string>();
   await state.initialize();
+  const tutor = await createTutor(config);
   await app.register(multipart, { limits: { files: 1, fileSize: MAX_AUDIO_BYTES, fields: 1 } });
+  app.addHook("onClose", async () => tutor.close());
+  app.log.info({ tutorMode: tutor.mode }, "tutor transport ready");
 
   app.get("/health", async () => ({ status: "ready" }));
   app.addHook("onRequest", async (request, reply) => {
@@ -66,7 +69,7 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       const codexStarted = Date.now();
       let result;
       try {
-        result = await askTutor(config, transcript, session.codexThreadId, abortController.signal);
+        result = await tutor.ask(transcript, session.codexThreadId, abortController.signal);
         request.log.info({ requestId: request.id, stage: "codex", outcome: "success",
           durationMs: Date.now() - codexStarted }, "dependency completed");
       } catch (error) {
@@ -139,7 +142,7 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       const codexStarted = Date.now();
       let result;
       try {
-        result = await askTutor(config, transcript, session.codexThreadId, abortController.signal);
+        result = await tutor.ask(transcript, session.codexThreadId, abortController.signal);
         dependencyOutcome("codex")("success", Date.now() - codexStarted);
       } catch (error) {
         dependencyOutcome("codex")("failed", Date.now() - codexStarted);

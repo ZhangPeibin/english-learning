@@ -11,6 +11,7 @@ export interface Config {
   whisperPath: string;
   whisperModelPath: string;
   codexPath: string;
+  codexTransport?: "exec" | "app-server";
   normalizationTimeoutMs?: number;
   transcriptionTimeoutMs?: number;
   codexTimeoutMs?: number;
@@ -62,6 +63,10 @@ export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<
   if (!token) throw new Error("VOICE_ACCESS_TOKEN is required");
   const port = Number(env.VOICE_PORT ?? "3000");
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("VOICE_PORT is invalid");
+  const codexTransport = env.VOICE_CODEX_TRANSPORT?.trim() || "exec";
+  if (codexTransport !== "exec" && codexTransport !== "app-server") {
+    throw new Error("VOICE_CODEX_TRANSPORT must be exec or app-server");
+  }
 
   const config: Config = {
     accessToken: token,
@@ -74,7 +79,8 @@ export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<
     ffmpegPath: required("VOICE_FFMPEG_PATH"),
     whisperPath: required("VOICE_WHISPER_PATH"),
     whisperModelPath: required("VOICE_WHISPER_MODEL_PATH"),
-    codexPath: required("VOICE_CODEX_PATH")
+    codexPath: required("VOICE_CODEX_PATH"),
+    codexTransport
   };
   await requireDirectory("VOICE_SKILL_DIR", config.skillDir);
   await Promise.all([
