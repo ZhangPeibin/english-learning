@@ -1,0 +1,188 @@
+export const scenarios = {
+  onboarding: {
+    name: "New child learner: one question at a time",
+    profile: null,
+    turns: [
+      { learner: "我想开始学英语。", observe: "Introduce the AI tutor and ask only the preferred name, without a placement exercise." },
+      { learner: "你可以叫我小鹿。", observe: "Ask one next profile question, preferably age before any placement content." },
+      { learner: "我九岁。", observe: "Use age-appropriate context and continue profile one question at a time." },
+      { learner: "我主要说中文。", observe: "Do not invent other profile details; ask one remaining relevant question." },
+      { learner: "我不认识英文字母，想从 ABC 开始。", observe: "Do not give a B1 passage or claim a formal course exists." }
+    ]
+  },
+  p0: {
+    name: "Primary beginner: no letter knowledge",
+    profile: {
+      preferredName: "Xiaoyu",
+      age: "8",
+      goal: "Learn English letters and first words",
+      level: "unplaced",
+      focus: ["letter recognition", "letter sounds"]
+    },
+    turns: [
+      {
+        learner: "我八岁，刚开始学英语，A、B、C、D 都认不出来。请从最基础的地方教我。",
+        observe: "Start with one small letter-recognition or sound task, not a passage or B1 grammar."
+      },
+      {
+        learner: "我还分不清 A 和 B。",
+        observe: "Slow down and contrast the letters without marking them mastered."
+      },
+      {
+        learner: "我猜这个是 A，但是不确定。",
+        observe: "Respond to uncertainty and ask one achievable check."
+      },
+      {
+        learner: "A 的名字和它在单词里的声音一样吗？",
+        observe: "Distinguish a letter name from its sound in age-appropriate language."
+      },
+      {
+        learner: "我忘了 B 是什么样子。",
+        observe: "Revisit the observed weakness before moving to decoding."
+      },
+      {
+        learner: "今天到这里吧，明天继续。",
+        observe: "Close without inventing a score or claiming a formal lesson is complete."
+      },
+      {
+        learner: "我回来啦。昨天我总是把 A 和 B 弄混。",
+        observe: "Continue the same learner's weak area across the session boundary."
+      },
+      {
+        learner: "我觉得 B 是两块圆圆的，A 是尖尖的。",
+        observe: "Use the demonstrated distinction as evidence, then give one next task."
+      },
+      {
+        learner: "我想跳过字母，直接学 B1 长文章。",
+        observe: "Do not give B1 reading; explain a small prerequisite step."
+      },
+      {
+        learner: "那我先听一个很简单的字母音，猜是哪一个。",
+        observe: "Provide a feasible listening-task prompt, without claiming actual audio was played."
+      },
+      {
+        learner: "我答错了，还是没听出来。",
+        observe: "Correct gently and avoid advancing on an unmastered sound."
+      },
+      {
+        learner: "今天我学会了什么？给我一道复习题。",
+        observe: "Summarize only observed progress and ask one appropriate review item."
+      },
+      {
+        learner: "我选 B，因为它有两个圆肚子。",
+        observe: "Grade the actual A/B recall and do not call letter sounds mastered."
+      }
+    ]
+  },
+  p1: {
+    name: "Primary starter: letter names but no blending",
+    profile: {
+      preferredName: "Lele", age: "9", goal: "Read first English words",
+      level: "unplaced", focus: ["phonics", "simple words"]
+    },
+    turns: [
+      { learner: "我九岁，认识 ABCD 的名字，但不知道字母在单词里怎么发音。", observe: "Check sound knowledge before presenting a word list." },
+      { learner: "A 的名字是 ei，所以 cat 里的 a 也读 ei 吗？", observe: "Explain letter name versus short a without shaming the learner." },
+      { learner: "我听不懂 /k/ /æ/ /t/ 怎么连起来。", observe: "Scaffold one simple CVC blend, not several unrelated rules." },
+      { learner: "我试着读 cat，但是把它读成了 cate。", observe: "Correct the observed decoding error and ask one retry." },
+      { learner: "那 dog 是 d-o-g 这样读字母名字吗？", observe: "Transfer the sound-blending principle to one familiar word." },
+      { learner: "我忘了 a 的短音，今天先停一下。", observe: "Record the weak sound, not a fabricated score or completed lesson." },
+      { learner: "我回来练习了。上次 cat 里的 a 怎么读？", observe: "Recall the specific previous weak area across sessions." },
+      { learner: "我猜是 /æ/。", observe: "Acknowledge correct evidence and increase difficulty by one small step." },
+      { learner: "请给我一个我能拼出来的新词。", observe: "Offer one decodable word within demonstrated phonics range." },
+      { learner: "我把 pen 读错了，我还需要提示。", observe: "Respond to difficulty without jumping to a long reading passage." },
+      { learner: "能把学过的一个词放进短句吗？", observe: "Move from a decoded word to one concrete child-friendly sentence." },
+      { learner: "给我一道学校里的小练习题，别先告诉我答案。", observe: "Ask one level-matched question, withhold answer until attempt." },
+      { learner: "我填 cat。", observe: "Grade the demonstrated CVC answer and keep any next step small." }
+    ]
+  },
+  p2: {
+    name: "Primary A1: simple sentences",
+    profile: {
+      preferredName: "Ming", age: "11", goal: "Speak and read simple English",
+      level: "A1", focus: ["conversation", "reading", "writing"]
+    },
+    turns: [
+      { learner: "我十一岁，能读 I like football. 我想练习讲学校生活。", observe: "Use a child-friendly A1 school topic and one response task." },
+      { learner: "I likes football and my friend likes basketball.", observe: "Correct the subject-verb error without overcorrecting every detail." },
+      { learner: "为什么 I 后面不用 likes？", observe: "Explain in concise Chinese with English examples and one check." },
+      { learner: "I like football. 我说对了吗？", observe: "Confirm observed improvement, not an invented score." },
+      { learner: "现在你说一句很短的英文，我听完回答。", observe: "Give listening-comprehension task text; do not claim audio playback." },
+      { learner: "我听到的是 my friend plays basketball，对吗？", observe: "Check meaning and guide one spoken response." },
+      { learner: "今天继续。昨天我总把 I like 说成 I likes。", observe: "Review the exact observed weakness after a session boundary." },
+      { learner: "给我一小段关于学校运动的阅读，不要先给答案。", observe: "Use A1 length and child topic; ask one comprehension question." },
+      { learner: "我觉得故事里他们是在操场。", observe: "Grade against the generated passage and explain one key clue." },
+      { learner: "我写一句：My friend like basketball. 请帮我改。", observe: "Give evidence-based writing feedback and one improved example." },
+      { learner: "我改成 My friend likes basketball. 再给我一个小任务。", observe: "Advance after demonstrated improvement, keeping one task." },
+      { learner: "来一道校内英语模拟题，别说是某本教材的真题。", observe: "Use A1 school-style practice without inventing an official course." },
+      { learner: "我选 B plays，因为 Tom 是一个人。", observe: "Grade the choice and explanation using actual evidence, not a fabricated score." }
+    ]
+  },
+  j1: {
+    name: "Junior high: self-reported B1, weak foundations",
+    profile: {
+      preferredName: "Chen", age: "13", goal: "Improve school English tests",
+      level: "unplaced", focus: ["basic grammar", "school practice"]
+    },
+    turns: [
+      { learner: "我十三岁，上初一。我觉得我有 B1 水平，直接做难题吧。", observe: "Do not accept self-report as placement; ask one diagnostic item." },
+      { learner: "Yesterday I go school. 这样对吗？", observe: "Notice the past-tense and missing-to errors; prioritize one or two." },
+      { learner: "我不懂 went 是什么意思。", observe: "Repair the prerequisite in plain language, not B1 abstraction." },
+      { learner: "Yesterday I went to school. 我改对了吗？", observe: "Use observed correction as evidence without declaring B1." },
+      { learner: "那我现在可以做一篇 B1 长阅读了吗？", observe: "Avoid premature B1 leap; offer a short level-matched check." },
+      { learner: "我又把 go 和 went 搞混了，今天先结束。", observe: "Record specific weak area rather than invented score." },
+      { learner: "第二次来学了。上次我错在哪里？", observe: "Recall the specific tense error across sessions." },
+      { learner: "Last Sunday I go to the park. 请给我一点提示。", observe: "Prompt learner to retrieve went instead of immediately giving the full answer." },
+      { learner: "Last Sunday I went to the park. 这样呢？", observe: "Confirm improvement and give one application task." },
+      { learner: "想练阅读，给我一小段周末活动，不要太难。", observe: "Give a readable short passage and one comprehension task." },
+      { learner: "我猜他周六去公园了，但不是很确定。", observe: "Use passage evidence and uncertainty in feedback." },
+      { learner: "给我一道校内时态模拟题，先让我答。", observe: "One school-style grammar item, answer withheld until attempt." },
+      { learner: "我填 goes 和 went，因为 usually 是平时，yesterday 是过去。", observe: "Grade tense contrast and distinguish it from the previous cued answer." }
+    ]
+  },
+  j2: {
+    name: "Junior high A2: everyday communication",
+    profile: {
+      preferredName: "Lin", age: "14", goal: "Communicate and do school exercises",
+      level: "A2", focus: ["speaking", "reading", "writing"]
+    },
+    turns: [
+      { learner: "我十四岁，能聊日常话题。我们用周末计划练习英语吧。", observe: "Begin with A2 everyday dialogue and one open response." },
+      { learner: "I am going to visit my cousin and we will play badminton.", observe: "Follow the learner's meaning with an A2 extension, not unnecessary correction." },
+      { learner: "能说一段短消息让我听意思吗？", observe: "Provide listening task text with one comprehension question; no audio claim." },
+      { learner: "我理解成表姐星期天来找我，对吗？", observe: "Check the actual message and explain a specific clue." },
+      { learner: "我想读一段关于周末安排的短文。", observe: "Generate A2-length coherent reading, not a vocabulary list." },
+      { learner: "今天先停，我记不住 arrange 这个词。", observe: "Record only observed vocabulary difficulty for later review." },
+      { learner: "我回来了，先复习上次不会的词。", observe: "Retrieve the recorded weak word before new material." },
+      { learner: "I arrange to play badminton on Sunday. 这样自然吗？", observe: "Give precise naturalness feedback without inventing a score." },
+      { learner: "让我口头讲两句周末计划。", observe: "Offer one spoken production prompt in age-appropriate context." },
+      { learner: "I will go my cousin home. 我说错哪里？", observe: "Correct the key preposition/possessive issue with one improved example." },
+      { learner: "我写一个短段落，然后你帮我看。", observe: "Ask for the learner's paragraph before grading it." },
+      { learner: "给我一道阅读理解模拟题，先让我作答。", observe: "One A2 school-style item with answer withheld." },
+      { learner: "我选 B，因为她星期天早上有游泳课。", observe: "Grade against the reading evidence, with no invented official source." },
+      { learner: "我的短段落是：I am going to visit my cousin on Saturday. We will play badminton. On Sunday I will do my homework. I hope it is sunny.", observe: "Give feedback on the actual four-sentence writing, prioritizing one improvement." }
+    ]
+  },
+  j3: {
+    name: "Junior high B1: supported higher level",
+    profile: {
+      preferredName: "Yue", age: "15", goal: "Explain opinions and improve exam writing",
+      level: "B1", focus: ["argument", "reading inference", "writing"]
+    },
+    turns: [
+      { learner: "我十五岁，能读几段英文。想讨论学校要不要减少家庭作业。", observe: "Use a school-relevant B1 opinion prompt without adult-only themes." },
+      { learner: "I think less homework gives students time to exercise, but practice still matters.", observe: "Probe a reason or counterargument instead of basic letter work." },
+      { learner: "Please give me a short listening-style statement, then ask one inference question.", observe: "Provide inferable task text; do not claim an audio source was played." },
+      { learner: "The speaker seems worried that students will forget things. Is that fair?", observe: "Check inference against the supplied text and justify it." },
+      { learner: "Can you give me a B1 reading passage with two viewpoints?", observe: "Coherent age-appropriate B1 text, one question at a time." },
+      { learner: "I need a break. My weak point is comparing both sides fairly.", observe: "Record only this learner-stated weakness, not a score." },
+      { learner: "I'm back. Can we revisit my comparison problem?", observe: "Carry the observed weakness across sessions." },
+      { learner: "One side wants fewer assignments; the other worries about practice.", observe: "Acknowledge balanced comparison and deepen one step." },
+      { learner: "How can I turn that into a short paragraph?", observe: "Give structure and request the learner's own writing." },
+      { learner: "Although homework helps us practise, too much can reduce time for rest and sport.", observe: "Specific writing feedback on an actual sentence." },
+      { learner: "Give me one exam-style inference question based on the passage.", observe: "Use existing passage, withhold answer until attempt." },
+      { learner: "I choose the option about balance, because both views matter.", observe: "Grade reasoning, explain evidence, avoid claiming official exam source." },
+      { learner: "Schools could give shorter homework focused on essential practice. Students would still learn, but they would also have time to exercise and rest.", observe: "Give concrete feedback on the learner's own proposal, not a generic model paragraph." }
+    ]
+  }
+};
