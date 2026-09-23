@@ -63,7 +63,8 @@ requests it or when their recorded preference and level make it useful.
 
 After the learner responds, append a concise entry to `reading_history` using
 the schema in `references/learning-state.md`. Record only observed evidence.
-Update `weak_areas` or `review_queue` when the response justifies it.
+Update `weak_areas` or the canonical `learning_items` record when the response
+justifies it. Do not add new entries to the legacy `review_queue`.
 
 Do not add the activity to `completed_lessons`, assign it a formal lesson ID,
 or save the generated passage unless the learner explicitly asks to bookmark

@@ -20,13 +20,23 @@ creating or updating the file.
 - Append an attempt only when the learner actually responded. Record whether
   the response was independent or followed a prompt, hint, model, correction,
   answer choice, or other cue.
+- `independent` means the learner responded to a neutral recall or application
+  question without an answer-bearing hint in that turn. Instructions, context,
+  and a neutral question do not make a response cued. A model answer, target
+  form, correction, answer choice, completion frame, or hint that reveals part
+  of the answer makes the response `cued`.
 - Do not convert a cued success into independent success. Do not mark an item
   mastered after one correct response or after a correction the tutor supplied.
 - After every review attempt, update the same item's `due_date`; do not add a
   second learning item or duplicate review entry.
-- Treat `review_queue` as a legacy field. Read it when `learning_items` is absent
-  or has no due items, and preserve it and all unknown fields when updating an
-  existing learner file. New review records belong in `learning_items`.
+- Treat `review_queue` as a legacy field. Its date may be named `due_date` or
+  `due`. Read it when `learning_items` is absent or has no due items. If an
+  equivalent canonical item exists, remove the legacy duplicate. Otherwise,
+  after the learner attempts a selected legacy item, convert it to a canonical
+  learning item, retain its unknown properties, append the observed attempt,
+  and remove the original queue entry. This retirement prevents the same
+  legacy entry from recurring forever. Leave unrelated legacy entries intact.
+  New review records belong in `learning_items`.
 - Keep adaptive readings out of `completed_lessons` and `current_lesson`.
 - Store only useful adaptive-reading metadata by default, not generated passages.
 - Record only profile details the learner provides. Do not infer age, location,
@@ -86,14 +96,20 @@ Each `learning_items` entry has this shape:
 - `meaning_or_use` distinguishes items that have the same spelling but a
   different meaning or function.
 - `status` is `needs_work`, `cued`, `independent`, or `mastered`.
-- `due_date` is the next review date in `YYYY-MM-DD` format.
+- `due_date` is the next review date in `YYYY-MM-DD` format, calculated from
+  the attempt's `date` in the learner's local calendar. Ask for the learner's
+  timezone or local date only when the date boundary is uncertain and affects
+  scheduling; do not infer a location from language.
 - `attempts` is an append-only list of observed learner responses. Each attempt
   records `date`, the concise `prompt`, the learner's actual `response`,
   `result` (`correct`, `partial`, or `incorrect`), and `support` (`cued` or
   `independent`). Preserve additional attempt fields if present.
 
-Use these conservative scheduling defaults unless the learner has an explicit
-schedule already recorded:
+Use these conservative scheduling defaults unless the learner has explicitly
+chosen different review intervals. An existing item's current `due_date` is
+not an interval override: after each attempt, replace it with the newly
+calculated date. Preserve an explicit learner interval preference and apply it
+from the current attempt date.
 
 - Incorrect or partial: set `status: needs_work` and review the next day.
 - Correct with any cue: set `status: cued` and review the next day.

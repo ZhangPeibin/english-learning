@@ -1,11 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
-const paths = process.argv.slice(2);
-if (!paths.length) throw new Error("Usage: node tests/skill/check.mjs <trace.json> [...]");
-
-let failures = 0;
-for (const filePath of paths) {
-  const trace = JSON.parse(await readFile(filePath, "utf8"));
+export function evaluateTrace(trace) {
   const checks = [];
   const add = (name, passed, turn, detail) => checks.push({ name, outcome: passed ? "pass" : "fail", turn, detail });
   add("Codex completed every scripted turn", trace.turns.every((turn) => turn.exitCode === 0 && turn.reply), null, "No failed or empty model reply");
@@ -55,27 +51,64 @@ for (const filePath of paths) {
   if (trace.scenarioId === "progress") {
     if (trace.turns.length >= 6) {
       const state = trace.turns[5].state ?? "";
-      const reviewQueue = state.match(/^review_queue:\s*\n((?:[ \t]+.*\n)*)/m)?.[1] ?? "";
+      const learningItems = yamlField(state, "learning_items");
+      const reviewQueue = yamlField(state, "review_queue");
       add("Attempted borrowing is saved as a specific review target",
-        /^\s*-\s*topic:\s*\S/m.test(reviewQueue)
-          && /^\s*reason:\s*\S/m.test(reviewQueue)
-          && /borrow|借/i.test(reviewQueue), 6,
-        "A queued topic and reason should identify the borrowing practice attempted by the learner");
+        /borrow|借/i.test(learningItems)
+          && /^\s+attempts:/m.test(learningItems)
+          && /^\s+response:\s*\S/m.test(learningItems)
+          && /^\s+support:\s*(?:cued|independent)\s*$/m.test(learningItems)
+          && /^\s+due_date:\s*\d{4}-\d{2}-\d{2}\s*$/m.test(learningItems), 6,
+        "A canonical learning item should retain borrowing evidence, support, and its next due date");
+      add("Canonical borrowing does not retain an active legacy duplicate",
+        !/borrow|借/i.test(reviewQueue), 6,
+        "A converted or superseded legacy review entry must be retired");
     }
     if (trace.turns.length >= 7) {
       add("Later practice starts in a fresh Codex thread",
         Boolean(trace.turns[5].threadId && trace.turns[6].threadId
           && trace.turns[5].threadId !== trace.turns[6].threadId), 7,
         "The tutor must recover progress from learner state rather than prior thread context");
-      add("Fresh-thread reply starts a borrowing review task",
-        /borrow|借/i.test(reply(7)) && /[?？]/.test(reply(7)), 7,
-        "The response should ask the learner to apply the saved borrowing target; inspect the reply for pedagogical fit");
+      const state = trace.turns[6].state ?? "";
+      const due = reviewDueDate(state);
+      const localDate = state.match(/^last_studied:\s*(\d{4}-\d{2}-\d{2})\s*$/m)?.[1];
+      if (due && localDate && due <= localDate) add("Fresh-thread reply starts a due review task",
+        /borrow|借/i.test(reply(7)) && /[?？。]/.test(reply(7)), 7,
+        "When the saved borrowing target is due, the response should ask the learner to apply it");
     }
   }
 
-  const failed = checks.filter((check) => check.outcome === "fail");
-  failures += failed.length;
-  process.stdout.write(`${trace.scenarioId}: ${checks.length - failed.length} pass, ${failed.length} fail\n`);
-  for (const check of failed) process.stdout.write(`  turn ${check.turn}: ${check.name} (${check.detail})\n`);
+  return checks;
 }
-process.exitCode = failures ? 1 : 0;
+
+function yamlField(state, name) {
+  return state.match(new RegExp(`^${name}:[ \\t]*(?:\\[\\])?[ \\t]*\\n((?:[ \\t]+.*\\n)*)`, "m"))?.[1] ?? "";
+}
+
+function earliestDate(block, names) {
+  const pattern = new RegExp(`^\\s+(?:-\\s*)?(?:${names.join("|")}):\\s*(\\d{4}-\\d{2}-\\d{2})\\s*$`, "gm");
+  return [...block.matchAll(pattern)].map((match) => match[1]).sort()[0] ?? null;
+}
+
+export function reviewDueDate(state) {
+  return earliestDate(yamlField(state, "learning_items"), ["due_date"])
+    ?? earliestDate(yamlField(state, "review_queue"), ["due_date", "due"]);
+}
+
+async function main(paths) {
+  if (!paths.length) throw new Error("Usage: node tests/skill/check.mjs <trace.json> [...]");
+  let failures = 0;
+  for (const filePath of paths) {
+    const trace = JSON.parse(await readFile(filePath, "utf8"));
+    const checks = evaluateTrace(trace);
+    const failed = checks.filter((check) => check.outcome === "fail");
+    failures += failed.length;
+    process.stdout.write(`${trace.scenarioId}: ${checks.length - failed.length} pass, ${failed.length} fail\n`);
+    for (const check of failed) process.stdout.write(`  turn ${check.turn}: ${check.name} (${check.detail})\n`);
+  }
+  process.exitCode = failures ? 1 : 0;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main(process.argv.slice(2));
+}
