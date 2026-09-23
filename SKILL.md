@@ -1,6 +1,6 @@
 ---
 name: english-learning
-description: Guide personalized English learning through structured courses and agent-generated adaptive reading, including placement, lessons, /read practice, quizzes, review, and progress tracking. Use when a learner asks to start or continue learning English, enters /read, finds a formal course, practises a skill, reviews mistakes, or prepares for an English exam. Do not use for one-off translation or editing requests unrelated to learning.
+description: Guide personalized English learning through structured courses and agent-generated adaptive reading, including placement, lessons, reading practice, quizzes, review, and progress tracking. Use when a learner asks to start or continue learning English, practise reading or another skill, review mistakes, find a formal course, or prepare for an English exam. Do not use for one-off translation or editing requests unrelated to learning.
 ---
 
 # English Learning
@@ -14,8 +14,8 @@ Resolve paths relative to this `SKILL.md` file:
 
 - Read `curriculum/README.md` to find formal courses and lessons.
 - Read only the selected formal lesson, not the whole curriculum.
-- Read `references/adaptive-reading.md` when the learner enters `/read` or asks
-  for reading generated for their current level.
+- Read `references/adaptive-reading.md` when choosing or generating reading
+  practice for the learner.
 - Read `references/learning-state.md` before creating or changing the resolved
   learning-state file.
 - Read `references/soul.md` before a learner-facing session and follow its
@@ -112,13 +112,14 @@ Adapt explanation language to the learner. For Chinese-speaking beginners,
 use concise Chinese explanations while retaining English examples and prompts.
 Increase English gradually as proficiency improves.
 
-### Adaptive reading (`/read`)
+### Adaptive reading
 
-Treat `/read` as the learner-facing shorthand for an adaptive reading session,
-not as a formal course. Read `references/adaptive-reading.md` and generate the
-passage at request time when the learner is ready to read it. A requested CEFR
-level does not override demonstrated prerequisites; offer a reachable next
-step when the requested passage is not yet usable.
+Offer adaptive reading when it fits the learner's goal and demonstrated
+readiness, or when the learner asks for reading practice in their own words.
+Read `references/adaptive-reading.md` and generate the passage at request time
+when the learner is ready to read it. A requested CEFR level does not override
+demonstrated prerequisites; offer a reachable next step when the requested
+passage is not yet usable.
 
 Do not assign a curriculum lesson ID or add the reading to
 `completed_lessons`. After the learner responds, record concise evidence in

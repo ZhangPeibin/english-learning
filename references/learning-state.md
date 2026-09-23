@@ -35,7 +35,7 @@ creating or updating the file.
 - `study_minutes_per_session`: the learner's available time.
 - `current_lesson`: lesson being studied, or `null`.
 - `completed_lessons`: evidence-bearing completion records.
-- `reading_preferences`: topics and presentation choices for `/read`.
+- `reading_preferences`: topics and presentation choices for reading practice.
 - `reading_history`: concise records of completed adaptive reading sessions.
 - `weak_areas`: recurring or important difficulties observed in responses.
 - `review_queue`: lesson or topic, due date, and reason for review.

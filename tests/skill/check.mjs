@@ -27,7 +27,7 @@ for (const filePath of paths) {
       9, `${englishWords(reply(9))} English words after a non-reader asked for B1`);
   }
   if (trace.scenarioId === "r0" && trace.turns.length >= 1) {
-    add("Explicit /read B1 does not override a pre-reader's prerequisites",
+    add("B1 reading request does not override a pre-reader's prerequisites",
       englishWords(reply(1)) <= 80, 1,
       `${englishWords(reply(1))} English words when a child who cannot identify letters requested B1`);
   }

@@ -5,10 +5,10 @@ not a formal course and does not have a curriculum lesson ID.
 
 ## Interpret the request
 
-Use this workflow for `/read` and natural-language requests for reading at the
-learner's current level.
+Use this workflow when reading practice fits the learner's progress or the
+learner asks for it.
 
-1. Read `LEARNING.md` when it exists.
+1. Read the resolved learning-state file when it exists.
 2. Use the recorded CEFR level and observed reading ability. A requested level
    is a goal, not evidence that the learner can read at that level. If it is
    far above demonstrated prerequisites, explain the gap and offer a short

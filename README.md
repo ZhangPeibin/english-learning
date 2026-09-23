@@ -8,26 +8,16 @@ sequenced material belongs in the curriculum.
 
 ## How it works
 
-```text
-formal curriculum/             /read request
-        |                           |
-        |                           v
-        |                  agent generates a passage
-        |                           |
-        +-------------+-------------+
-                      v
-              english-learning Skill
-                      |
-                      v
-                 LEARNING.md
-```
+The learner asks to start, continue, or practise a skill. The Skill uses their
+progress to choose a suitable activity from the formal curriculum or generate
+adaptive practice, then records observed results in their learning-state file.
 
 `SKILL.md` contains the teaching workflow. `curriculum/` contains only authored,
 versioned courses such as `American High School English - Lesson 1` or a
 structured IELTS writing course. A learner's `LEARNING.md` remains in their own
 workspace, separate from shared course content.
 
-## Two learning modes
+## Learning materials
 
 ### Formal courses
 
@@ -38,24 +28,18 @@ No formal course has been published in this initial version.
 
 ### Adaptive reading
 
-`/read` asks the Agent to generate a fresh extracurricular reading passage at
-the learner's current CEFR level. It can incorporate interests, weak areas, and
-recent vocabulary, then provide comprehension and production practice.
+When reading fits the learner's progress or they ask for it, the Skill generates
+a fresh extracurricular passage at a suitable level. It can incorporate
+interests, weak areas, and recent vocabulary, then provide comprehension and
+production practice.
 
 Examples:
 
 ```text
-/read
-/read technology
-/read B2 about American school life
-/read 300 words, English only
-```
-
-`/read` is an intent understood by this Skill, not a registered Codex platform
-command. If it is not routed automatically, invoke it as:
-
-```text
-Use $english-learning /read technology
+Continue my English practice.
+Give me a short reading passage about technology.
+I'd like to practise reading about school life.
+Give me a 300-word passage in English only.
 ```
 
 Adaptive readings do not receive formal lesson IDs and are not added to
@@ -84,7 +68,7 @@ Example requests:
 Use $english-learning to help me start learning English.
 Use $english-learning to continue my next lesson.
 Use $english-learning to quiz me on completed lessons.
-Use $english-learning /read to give me reading practice at my current level.
+Use $english-learning to give me reading practice at my current level.
 我想用 $english-learning 准备雅思，请先判断我的水平。
 ```
 

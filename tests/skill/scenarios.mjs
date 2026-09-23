@@ -11,13 +11,13 @@ export const scenarios = {
     ]
   },
   r0: {
-    name: "Explicit /read request from a learner who cannot identify letters",
+    name: "Reading request from a learner who cannot identify letters",
     profile: {
       preferredName: "An", age: "8", goal: "Learn first English letters",
       level: "unplaced", focus: ["letter recognition"]
     },
     turns: [
-      { learner: "我八岁，A 和 B 还认不出来。/read B1 给我一篇长文章。", observe: "Do not generate B1 reading; explain the immediate letter prerequisite and give one reachable task." },
+      { learner: "我八岁，A 和 B 还认不出来。给我一篇 B1 长文章。", observe: "Do not generate B1 reading; explain the immediate letter prerequisite and give one reachable task." },
       { learner: "我想先找出 B。", observe: "Continue with one letter-recognition task, not a reading passage." }
     ]
   },
