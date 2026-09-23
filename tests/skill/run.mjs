@@ -68,6 +68,11 @@ let threadId = resumeWorkspace ? trace.turns.at(-1)?.threadId ?? "--last" : unde
 for (let index = trace.turns.length; index < maxTurns; index += 1) {
   if (scenario.freshSessionStartTurn === index + 1) threadId = undefined;
   const turn = scenario.turns[index];
+  const stateBefore = await readFile(statePath, "utf8").catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  const localDate = formatLocalDate(new Date());
   const initialPrompt = `Use the English Learning skill at ${path.join(skillDir, "SKILL.md")} to tutor me. My learner message: ${turn.learner}`;
   const args = threadId
     ? ["exec", "resume", "-c", 'sandbox_mode="workspace-write"', "-c", 'approval_policy="never"', "--json", threadId, turn.learner]
@@ -81,6 +86,8 @@ for (let index = trace.turns.length; index < maxTurns; index += 1) {
     observe: turn.observe,
     reply: execution.reply,
     threadId: execution.threadId ?? threadId,
+    localDate,
+    stateBefore,
     state: await readFile(statePath, "utf8").catch((error) => {
       if (error.code === "ENOENT") return null;
       throw error;
@@ -95,6 +102,13 @@ for (let index = trace.turns.length; index < maxTurns; index += 1) {
     process.exitCode = 1;
     break;
   }
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 process.stdout.write(`Trace: ${path.join(workspace, "trace.json")}\n`);
 process.stdout.write(`Review: ${path.join(workspace, "review.md")}\n`);

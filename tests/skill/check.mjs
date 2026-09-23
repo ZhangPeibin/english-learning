@@ -61,7 +61,7 @@ export function evaluateTrace(trace) {
           && /^\s+due_date:\s*\d{4}-\d{2}-\d{2}\s*$/m.test(learningItems), 6,
         "A canonical learning item should retain borrowing evidence, support, and its next due date");
       add("Canonical borrowing does not retain an active legacy duplicate",
-        !/borrow|借/i.test(reviewQueue), 6,
+        !activeLegacyEntries(reviewQueue).some((entry) => /borrow|借/i.test(entry)), 6,
         "A converted or superseded legacy review entry must be retired");
     }
     if (trace.turns.length >= 7) {
@@ -69,9 +69,9 @@ export function evaluateTrace(trace) {
         Boolean(trace.turns[5].threadId && trace.turns[6].threadId
           && trace.turns[5].threadId !== trace.turns[6].threadId), 7,
         "The tutor must recover progress from learner state rather than prior thread context");
-      const state = trace.turns[6].state ?? "";
-      const due = reviewDueDate(state);
-      const localDate = state.match(/^last_studied:\s*(\d{4}-\d{2}-\d{2})\s*$/m)?.[1];
+      const stateBefore = trace.turns[6].stateBefore;
+      const localDate = trace.turns[6].localDate;
+      const due = stateBefore ? reviewDueDate(stateBefore) : null;
       if (due && localDate && due <= localDate) add("Fresh-thread reply starts a due review task",
         /borrow|借/i.test(reply(7)) && /[?？。]/.test(reply(7)), 7,
         "When the saved borrowing target is due, the response should ask the learner to apply it");
@@ -90,9 +90,18 @@ function earliestDate(block, names) {
   return [...block.matchAll(pattern)].map((match) => match[1]).sort()[0] ?? null;
 }
 
+export function activeLegacyEntries(block) {
+  const entries = [];
+  for (const line of block.split("\n")) {
+    if (/^\s+-\s+/.test(line)) entries.push(line);
+    else if (entries.length && /^\s+\S/.test(line)) entries[entries.length - 1] += `\n${line}`;
+  }
+  return entries.filter((entry) => !/^\s+status:\s*retired\s*$/m.test(entry));
+}
+
 export function reviewDueDate(state) {
   return earliestDate(yamlField(state, "learning_items"), ["due_date"])
-    ?? earliestDate(yamlField(state, "review_queue"), ["due_date", "due"]);
+    ?? earliestDate(activeLegacyEntries(yamlField(state, "review_queue")).join("\n"), ["due_date", "due"]);
 }
 
 async function main(paths) {

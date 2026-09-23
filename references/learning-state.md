@@ -31,12 +31,20 @@ creating or updating the file.
   second learning item or duplicate review entry.
 - Treat `review_queue` as a legacy field. Its date may be named `due_date` or
   `due`. Read it when `learning_items` is absent or has no due items. If an
-  equivalent canonical item exists, remove the legacy duplicate. Otherwise,
-  after the learner attempts a selected legacy item, convert it to a canonical
-  learning item, retain its unknown properties, append the observed attempt,
-  and remove the original queue entry. This retirement prevents the same
-  legacy entry from recurring forever. Leave unrelated legacy entries intact.
-  New review records belong in `learning_items`.
+  equivalent canonical item exists, keep the legacy entry in place with all of
+  its fields and set `status: retired`, `retired_reason: migrated`, and
+  `canonical_id` to the canonical item's ID. Otherwise, after the learner
+  attempts a selected legacy vocabulary, grammar, or sentence-pattern item,
+  create the canonical item and retire the legacy entry the same way. Ignore
+  retired entries when selecting reviews. Keeping them in place prevents both
+  recurrence and loss or collision of unknown learner metadata. Leave
+  unrelated legacy entries intact. New review records belong in
+  `learning_items`.
+- A legacy topic outside vocabulary, grammar, or sentence patterns does not
+  belong in `learning_items`. Review it from `review_queue`, append or update
+  its observed result without deleting unknown fields, and replace its `due`
+  or `due_date` after the attempt. Do not duplicate or retire it unless a
+  canonical representation for that topic type is defined later.
 - Keep adaptive readings out of `completed_lessons` and `current_lesson`.
 - Store only useful adaptive-reading metadata by default, not generated passages.
 - Record only profile details the learner provides. Do not infer age, location,
