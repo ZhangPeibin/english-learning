@@ -89,8 +89,8 @@ over.
 
 Read the resolved learning-state file. Select due review from `learning_items`
 using `references/learning-state.md`; fall back to a due legacy `review_queue`
-entry (`due_date` or `due`) only when no canonical learning item is due. Retire
-or convert a legacy entry as specified by the reference so it does not recur
+entry (`due_date` or `due`) only when no canonical learning item is due. Convert
+and archive a legacy entry as specified by the reference so it does not recur
 after review. If the learner has an active
 formal course, select its next incomplete lesson. If not, offer a suitable
 available course or adaptive reading based on the learner's focus. For a

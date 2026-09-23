@@ -19,6 +19,7 @@ reading_history: []
 weak_areas: []
 learning_items: []
 review_queue: []
+legacy_review_history: []
 last_studied: null
 ---
 

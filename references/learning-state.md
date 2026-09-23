@@ -31,19 +31,20 @@ creating or updating the file.
   second learning item or duplicate review entry.
 - Treat `review_queue` as a legacy field. Its date may be named `due_date` or
   `due`. Read it when `learning_items` is absent or has no due items. If an
-  equivalent canonical item exists, keep the legacy entry in place with all of
-  its fields and set `status: retired`, `retired_reason: migrated`, and
-  `canonical_id` to the canonical item's ID. Otherwise, after the learner
-  attempts a selected legacy vocabulary, grammar, or sentence-pattern item,
-  create the canonical item and retire the legacy entry the same way. Ignore
-  retired entries when selecting reviews. Keeping them in place prevents both
-  recurrence and loss or collision of unknown learner metadata. Leave
-  unrelated legacy entries intact. New review records belong in
-  `learning_items`.
+  equivalent canonical item exists, remove the legacy entry from the active
+  queue and append it unchanged under a `legacy_review_history` wrapper that
+  records the canonical item's ID. Otherwise, after the learner attempts a
+  selected legacy vocabulary, grammar, or sentence-pattern item, create the
+  canonical item and archive the legacy entry the same way. Archived entries
+  never schedule reviews. Preserve every existing history entry, append rather
+  than replace, and leave unrelated queue entries intact. The wrapper keeps
+  migration metadata separate so learner-authored fields such as `status`,
+  `retired_reason`, and `canonical_id` cannot collide or be overwritten. New
+  review records belong in `learning_items`.
 - A legacy topic outside vocabulary, grammar, or sentence patterns does not
   belong in `learning_items`. Review it from `review_queue`, append or update
   its observed result without deleting unknown fields, and replace its `due`
-  or `due_date` after the attempt. Do not duplicate or retire it unless a
+  or `due_date` after the attempt. Do not duplicate or archive it unless a
   canonical representation for that topic type is defined later.
 - Keep adaptive readings out of `completed_lessons` and `current_lesson`.
 - Store only useful adaptive-reading metadata by default, not generated passages.
@@ -72,12 +73,28 @@ creating or updating the file.
 - `learning_items`: canonical evidence and review schedule for vocabulary,
   grammar, and sentence patterns.
 - `review_queue`: legacy review records retained for compatibility.
+- `legacy_review_history`: append-only wrappers for legacy entries removed
+  from the active queue after canonical migration. History never schedules a
+  review.
 
 Scores are optional integers from 0 to 100. Omit a score when the activity did
 not produce enough evidence for one.
 
 Each `reading_history` entry may contain `date`, `level`, `topic`, `result`,
 `new_vocabulary`, and `notes`. It must not use a formal curriculum lesson ID.
+
+Each `legacy_review_history` entry contains `canonical_id` and `legacy_entry`.
+Copy the complete source queue entry beneath `legacy_entry` without renaming,
+removing, or overwriting any of its fields:
+
+```yaml
+legacy_review_history:
+  - canonical_id: borrow-request
+    legacy_entry:
+      topic: polite borrowing request
+      due: 2026-09-23
+      status: learner-authored value
+```
 
 ## Learning items
 
