@@ -1,3 +1,21 @@
+const legacyBorrowQueue = `
+  - topic: polite borrowing request
+    due: 2020-01-02
+    status: learner-authored
+    canonical_id: learner-note-42
+    learner_example: "my blue ruler"
+    coach_note: "needs a new example"
+  - topic: pronunciation confidence
+    due_date: 2099-01-01
+    coach_note: "learner asked to revisit"`;
+
+const priorLegacyHistory = `
+  - canonical_id: earlier-word
+    legacy_entry:
+      topic: earlier vocabulary
+      due: 2019-01-01
+      coach_note: "previous migration"`;
+
 export const scenarios = {
   onboarding: {
     name: "New child learner: one question at a time",
@@ -253,6 +271,69 @@ export const scenarios = {
       { learner: "如果我想礼貌地借橡皮，我说 Can I borrowed your eraser?", observe: "Correct the request pattern to Can I borrow your eraser? and distinguish base-form borrow from past borrowed." },
       { learner: "Can I borrow your eraser? 我现在先停。", observe: "Confirm the repaired request and close; save only observed vocabulary, tense, and sentence-pattern evidence, with a review target rather than an invented score or mastery claim." },
       { learner: "我回来了，今天想继续练学校里的英语。", observe: "In this fresh Codex thread, read the saved polite-borrowing review target and initiate one new-context request-pattern check before unrelated new material, without being asked to review or claiming the pattern is mastered." }
+    ]
+  },
+  due_canonical: {
+    name: "Overdue canonical pattern is reviewed and independently rescheduled",
+    profile: {
+      preferredName: "Tao", age: "12", goal: "Talk about school in simple English",
+      level: "A1", focus: ["speaking"]
+    },
+    learningItems: `
+  - id: borrow-request
+    type: sentence_pattern
+    item: "Can I borrow your ...?"
+    meaning_or_use: "make a polite request to borrow something"
+    status: cued
+    due_date: 2020-01-02
+    attempts:
+      - date: 2020-01-01
+        prompt: "Ask a classmate for an eraser."
+        response: "Can I borrow your eraser?"
+        result: correct
+        support: cued`,
+    turns: [
+      { learner: "我回来了，今天想继续练学校里的英语。今天想用笔记本作例子。", observe: "Read the overdue borrowing pattern and ask for a notebook-based recall or application before unrelated material, without giving the target form." },
+      { learner: "Can I borrow your notebook?", observe: "Grade the independent borrowing request, append the actual response with independent support, keep one canonical item, and set its next due date three local calendar days from this attempt." }
+    ]
+  },
+  due_legacy: {
+    name: "Overdue legacy pattern is reviewed and converted without metadata loss",
+    profile: {
+      preferredName: "Tao", age: "12", goal: "Talk about school in simple English",
+      level: "A1", focus: ["speaking"]
+    },
+    reviewQueue: legacyBorrowQueue,
+    legacyReviewHistory: priorLegacyHistory,
+    turns: [
+      { learner: "我回来了，今天想继续练学校里的英语。今天想用笔记本作例子。", observe: "With no due canonical item, select the overdue legacy borrowing request and ask for a notebook-based application without giving the answer." },
+      { learner: "Can I borrow your notebook?", observe: "Grade the response, create one canonical pattern item, remove the reviewed source from the active queue, and append its unchanged fields under legacy_review_history while retaining prior history and the unrelated pronunciation entry." }
+    ]
+  },
+  due_mixed: {
+    name: "Overdue legacy review is selected while a canonical item is due later",
+    profile: {
+      preferredName: "Tao", age: "12", goal: "Talk about school in simple English",
+      level: "A1", focus: ["speaking"]
+    },
+    learningItems: `
+  - id: third-person-s
+    type: grammar
+    item: "he/she + verb-s"
+    meaning_or_use: "describe another person's habitual action"
+    status: cued
+    due_date: 2099-01-01
+    attempts:
+      - date: 2020-01-01
+        prompt: "Describe what he does every day."
+        response: "He plays football."
+        result: correct
+        support: cued`,
+    reviewQueue: legacyBorrowQueue,
+    legacyReviewHistory: priorLegacyHistory,
+    turns: [
+      { learner: "我回来了，今天想继续练学校里的英语。今天想用笔记本作例子。", observe: "The canonical grammar item is not due; select the overdue legacy borrowing request and ask for a notebook-based application without revealing the answer." },
+      { learner: "Can I borrow your notebook?", observe: "Grade the borrowing response, preserve the future-due grammar item, convert the legacy source into one canonical pattern item, and archive the source unchanged while retaining prior history and unrelated queue data." }
     ]
   },
   tense_b1: {

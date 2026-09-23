@@ -47,7 +47,9 @@ reading_preferences:
   default_length: standard
 reading_history: []
 weak_areas: []
-review_queue: []
+learning_items:${scenario.learningItems ?? " []"}
+review_queue:${scenario.reviewQueue ?? " []"}
+legacy_review_history:${scenario.legacyReviewHistory ?? " []"}
 last_studied: null
 ---
 
@@ -80,7 +82,7 @@ for (let index = trace.turns.length; index < maxTurns; index += 1) {
   const execution = await runCodex(args, workspace);
   threadId = execution.threadId ?? threadId;
   trace.turns.push({
-    session: index < 6 ? 1 : 2,
+    session: scenario.freshSessionStartTurn && index + 1 >= scenario.freshSessionStartTurn ? 2 : 1,
     turn: index + 1,
     learner: turn.learner,
     observe: turn.observe,

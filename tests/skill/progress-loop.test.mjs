@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { activeLegacyEntries, evaluateTrace, reviewDueDate } from "./check.mjs";
 
-const state = ({ due = "2026-09-24", legacy = "review_queue: []" } = {}) => `
+const state = ({ due = "2026-09-24", legacy = "review_queue: []", history = "legacy_review_history: []" } = {}) => `
 current_lesson: null
 completed_lessons: []
 ${legacy}
+${history}
 learning_items:
   - id: borrow-request
     type: sentence_pattern
@@ -53,7 +54,7 @@ test("an active legacy duplicate is rejected after canonical conversion", () => 
   assert.equal(checks.find(({ name }) => name.includes("legacy duplicate"))?.outcome, "fail");
 });
 
-test("legacy conversion retires the source without losing unknown or unrelated entries", () => {
+test("legacy conversion archives the source without losing unknown or unrelated entries", () => {
   const legacyBefore = `current_lesson: null
 completed_lessons: []
 learning_items: []
@@ -61,29 +62,34 @@ review_queue:
   - topic: borrow request
     due: 2026-09-23
     learner_example: "my blue ruler"
+    status: learner-authored
+    canonical_id: learner-note-42
   - topic: pronunciation confidence
     due_date: 2026-09-25
     coach_note: "learner asked to revisit"
 last_studied: 2026-09-22
 `;
   const legacy = `review_queue:
-  - topic: borrow request
-    due: 2026-09-23
-    learner_example: "my blue ruler"
-    status: retired
-    retired_reason: migrated
-    canonical_id: borrow-request
   - topic: pronunciation confidence
     due_date: 2026-09-25
     coach_note: "learner asked to revisit"`;
-  const converted = state({ legacy });
+  const history = `legacy_review_history:
+  - canonical_id: borrow-request
+    legacy_entry:
+      topic: borrow request
+      due: 2026-09-23
+      learner_example: "my blue ruler"
+      status: learner-authored
+      canonical_id: learner-note-42`;
+  const converted = state({ legacy, history });
   const checks = evaluateTrace(progressTrace(converted, {
     finalReply: "请用 borrow 写一句话。",
     stateBefore: legacyBefore
   }));
   assert.deepEqual(checks.filter(({ outcome }) => outcome === "fail"), []);
   assert.match(converted, /learner_example: "my blue ruler"/);
-  assert.match(converted, /canonical_id: borrow-request/);
+  assert.match(converted, /legacy_review_history:\n  - canonical_id: borrow-request/);
+  assert.match(converted, /canonical_id: learner-note-42/);
   assert.deepEqual(activeLegacyEntries(legacy).map((entry) => entry.match(/topic:\s*([^\n]+)/)?.[1]), ["pronunciation confidence"]);
   assert.match(activeLegacyEntries(legacy)[0], /coach_note: "learner asked to revisit"/);
 });
@@ -99,6 +105,24 @@ test("a seeded overdue item requires a specific fresh-session review from pre-tu
 });
 
 test("legacy due and due_date spellings are accepted", () => {
-  assert.equal(reviewDueDate("learning_items: []\nreview_queue:\n  - due: 2026-09-22\n"), "2026-09-22");
-  assert.equal(reviewDueDate("learning_items: []\nreview_queue:\n  - due_date: 2026-09-21\n"), "2026-09-21");
+  assert.equal(reviewDueDate("learning_items: []\nreview_queue:\n  - due: 2026-09-22\n", "2026-09-23"), "2026-09-22");
+  assert.equal(reviewDueDate("learning_items: []\nreview_queue:\n  - due_date: 2026-09-21\n", "2026-09-23"), "2026-09-21");
+});
+
+test("future canonical date falls back to an overdue legacy queue item", () => {
+  const mixed = `learning_items:
+  - id: future-grammar
+    due_date: 2099-01-01
+review_queue:
+  - topic: borrow request
+    due: 2026-09-22
+    status: retired
+legacy_review_history:
+  - canonical_id: old-word
+    legacy_entry:
+      due: 2020-01-01
+`;
+  assert.equal(reviewDueDate(mixed, "2026-09-23"), "2026-09-22");
+  assert.equal(activeLegacyEntries("  - topic: borrow request\n    status: retired\n").length, 1);
+  assert.equal(reviewDueDate(mixed, "2026-09-21"), null);
 });
