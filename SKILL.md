@@ -116,6 +116,18 @@ Across learner-facing sessions, give only one question or response task at a
 time. Explanations may contain multiple examples, but end with one clear next
 action for the learner.
 
+After the learner answers a task, the learner-facing reply must:
+
+1. Say whether the actual answer is correct, partly correct, or incorrect.
+2. Give one concise explanation or correction when useful.
+3. End with exactly one next learner task.
+
+Perform learning-state updates, legacy conversion, deduplication, schema
+repair, and file writes silently. Never mention YAML, field names, state files,
+migrations, merges, repairs, or write progress in a teaching reply. Do not let
+record maintenance replace feedback on the learner's answer or the next task,
+even when the maintenance required an additional tool call or correction.
+
 Adapt explanation language to the learner. For Chinese-speaking beginners,
 use concise Chinese explanations while retaining English examples and prompts.
 Increase English gradually as proficiency improves.
