@@ -254,5 +254,75 @@ export const scenarios = {
       { learner: "Can I borrow your eraser? 我现在先停。", observe: "Confirm the repaired request and close; save only observed vocabulary, tense, and sentence-pattern evidence, with a review target rather than an invented score or mastery claim." },
       { learner: "我回来了，今天想继续练学校里的英语。", observe: "In this fresh Codex thread, read the saved polite-borrowing review target and initiate one new-context request-pattern check before unrelated new material, without being asked to review or claiming the pattern is mastered." }
     ]
+  },
+  tense_b1: {
+    name: "B1 grammar: present perfect versus past simple",
+    profile: {
+      preferredName: "Mei", age: "17", goal: "Write accurately about experiences",
+      level: "B1", focus: ["grammar", "writing"]
+    },
+    turns: [
+      { learner: "I have visited London last summer. Is this natural?", observe: "Identify the finished-time conflict and explain why 'I visited London last summer' uses past simple; ask at most one next task." },
+      { learner: "I visited London last summer. I have also visited Paris, but I don't remember when. Are both sentences right?", observe: "Confirm both sentences and explain the difference between a named finished time and an experience with no specified time; do not invent an error." },
+      { learner: "I have lived here for three years, and I still live here. Should I change it to past simple?", observe: "Keep present perfect for a situation continuing to now, distinguishing it from a finished past stay." }
+    ]
+  },
+  fixed_inference: {
+    name: "Reading inference from learner-supplied fixed text",
+    profile: {
+      preferredName: "Bo", age: "16", goal: "Support reading inferences with evidence",
+      level: "B1", focus: ["reading inference"]
+    },
+    turns: [
+      { learner: "Read only this text: 'Maya packed her umbrella although the sky was clear. At lunch, she checked the weather forecast again and moved the class picnic indoors.' What does Maya probably expect later? Give one clue from the text.", observe: "Infer possible rain or bad weather from the umbrella, repeated forecast check, and indoor move; distinguish inference from an explicit statement that it rained." },
+      { learner: "Could we instead conclude that it was already raining at lunch?", observe: "Explain that rain at lunch is possible but not established: the sky was clear earlier, while the forecast check and indoor move do not say whether rain had begun." }
+    ]
+  },
+  ielts_unplaced: {
+    name: "Unplaced IELTS aspirant with observed foundation gap",
+    profile: {
+      preferredName: "Yan", age: "17", goal: "Prepare for IELTS writing",
+      level: "unplaced", focus: ["grammar", "writing"]
+    },
+    turns: [
+      { learner: "I want IELTS band 8, but I don't know my level. Yesterday I go to library and read book. Can you check this sentence first?", observe: "Correct the observed past-tense and missing-article errors in a manageable step; do not infer band 8 or assign advanced essay writing." },
+      { learner: "Yesterday I went to the library and read a book. Is this correction right?", observe: "Confirm the actual corrected sentence while treating one cued repair as limited evidence, not a placement or band score." },
+      { learner: "Can I try one IELTS-style writing practice task now?", observe: "Offer one short, reachable writing task that checks the weak foundations and is clearly practice, without calling it an official IELTS item or awarding a band score." }
+    ]
+  },
+  toefl_text_b2: {
+    name: "B2 TOEFL-style practice through text only",
+    profile: {
+      preferredName: "Kai", age: "18", goal: "Prepare for TOEFL reading and listening",
+      level: "B2", focus: ["reading", "listening"]
+    },
+    turns: [
+      { learner: "I'm around B2. Give me one TOEFL-style listening practice item in this text chat. I can't play audio here. Let me answer before you explain it.", observe: "Supply a short, plausible listening script and one comprehension question in text, withhold the answer, and make no audio-playback or official-test claim." },
+      { learner: "I need a moment to think. Please repeat the script exactly, without the answer.", observe: "Repeat the same script exactly without revealing the solution or claiming an audio clip was played." },
+      { learner: "I still haven't answered. What detail in the script should I pay attention to?", observe: "Give one non-spoiling clue grounded in the supplied script and continue to withhold the answer." }
+    ]
+  },
+  ielts_both_views_b2: {
+    name: "B2 IELTS-style paragraph feedback against a fixed both-views prompt",
+    profile: {
+      preferredName: "Lin", age: "19", goal: "Develop both views in exam writing",
+      level: "B2", focus: ["writing", "argument development"]
+    },
+    turns: [
+      { learner: "IELTS-style practice prompt: Some people think university students should be required to study at least one science subject. Others think students should choose all their subjects. Discuss both views and give your opinion. Here is my paragraph: Students should be free to choose their subjects because interest helps them stay motivated. A student who enjoys history may work harder in that course than in a required science class. For this reason, I believe universities should let students decide what to study. Please give feedback on this paragraph.", observe: "Give feedback on the grammatical, clear choice paragraph without inventing errors. It may prioritize a gap in this paragraph's reasoning, but must also identify the required-science view needed elsewhere for a full both-views response; do not invent an IELTS band from one paragraph." },
+      { learner: "I added the other view: Supporters of a science requirement argue that basic scientific knowledge helps graduates evaluate evidence in everyday life. However, I still think students should choose their subjects because interest helps them stay motivated. Does this now address both views?", observe: "Confirm that these sentences now mention both views and give an opinion, while distinguishing mention from sufficient development; suggest a specific way to deepen the science rationale without falsely correcting valid grammar or awarding an official band." }
+    ]
+  },
+  toefl_fixed_transcript_b2: {
+    name: "B2 TOEFL-style transcript question with wrong answer and correction",
+    profile: {
+      preferredName: "Sam", age: "18", goal: "Practice listening comprehension through text",
+      level: "B2", focus: ["listening comprehension", "evidence-based answers"]
+    },
+    turns: [
+      { learner: "Use this fixed TOEFL-style practice transcript in text only: 'Professor: The geology review session is still on Thursday at 4 p.m., but the room has changed. The science lab is being repaired, so meet in Room 204 of the library. Bring your field notes; we will compare rock samples from last week's trip.' Question: Why was the review session moved? A. The original room was too small. B. The science lab is being repaired. C. The time of the session changed. D. The field trip was canceled. Let me answer first.", observe: "Use the supplied transcript and options without revealing B; do not claim audio playback or an official TOEFL item." },
+      { learner: "I choose C because the professor mentioned Thursday at 4 p.m.", observe: "Mark C incorrect using the transcript's 'still on Thursday at 4 p.m.' clue and explain that the time did not change. After this attempt, the tutor may reveal B and explain the lab-repair clue; do not invent a TOEFL score." },
+      { learner: "Then I choose B: the science lab is being repaired, so they must meet in the library.", observe: "Confirm B and the stated lab-repair reason, but treat this as a cued correction after B was revealed, not independent mastery; do not claim audio playback or an official score." }
+    ]
   }
 };
