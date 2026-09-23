@@ -1,0 +1,15 @@
+{
+  "models": {
+    "main": "gpt-6-sol",
+    "subagent": "gpt-5.6-sol"
+  },
+  "roles": {
+    "test": {
+      "tasks": {
+        "write": {
+          "model": "gpt-6-sol"
+        }
+      }
+    }
+  }
+}
