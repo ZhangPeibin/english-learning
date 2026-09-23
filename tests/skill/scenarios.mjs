@@ -237,5 +237,22 @@ export const scenarios = {
       { learner: "考试快到了我有点紧张，请别一下给五道题。", observe: "Respond calmly with one manageable practice step, not generic reassurance or a barrage of tasks." },
       { learner: "我的短段落是：Homework helps students practise, but too much of it leaves little time for rest. Schools should assign fewer tasks that focus on important skills. This way, students can learn well and still exercise.", observe: "Evaluate actual cohesion, accuracy, and argument; give one high-value improvement rather than a fabricated band score." }
     ]
+  },
+  progress: {
+    name: "Evidence-backed vocabulary, grammar, and pattern review after a fresh session",
+    profile: {
+      preferredName: "Tao", age: "12", goal: "Talk about school in simple English",
+      level: "A1", focus: ["vocabulary", "grammar", "speaking"]
+    },
+    freshSessionStartTurn: 7,
+    turns: [
+      { learner: "我想学会用英语向同学借一本书。", observe: "Teach borrow in a school context and elicit one short attempt; do not record mastery before an answer." },
+      { learner: "Can I borrow your book?", observe: "Confirm this correct request pattern and distinguish a successful prompted attempt from independent mastery." },
+      { learner: "昨天我借了小明的书，可以说 Yesterday I borrow Ming's book 吗？", observe: "Teach the past form borrowed and ask for one correction; record the actual tense error as review evidence." },
+      { learner: "Yesterday I borrowed Ming's book.", observe: "Confirm the corrected past-tense sentence, while retaining a review need because it followed a cue." },
+      { learner: "如果我想礼貌地借橡皮，我说 Can I borrowed your eraser?", observe: "Correct the request pattern to Can I borrow your eraser? and distinguish base-form borrow from past borrowed." },
+      { learner: "Can I borrow your eraser? 我现在先停。", observe: "Confirm the repaired request and close; save only observed vocabulary, tense, and sentence-pattern evidence, with a review target rather than an invented score or mastery claim." },
+      { learner: "我回来了，今天想继续练学校里的英语。", observe: "In this fresh Codex thread, read the saved polite-borrowing review target and initiate one new-context request-pattern check before unrelated new material, without being asked to review or claiming the pattern is mastered." }
+    ]
   }
 };

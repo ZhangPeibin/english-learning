@@ -52,6 +52,26 @@ for (const filePath of paths) {
     add("Exam-coaching tutor discloses AI identity",
       /\bAI\b|人工智能/i.test(reply(1)), 1, "Aspirational expertise is not an earned credential");
   }
+  if (trace.scenarioId === "progress") {
+    if (trace.turns.length >= 6) {
+      const state = trace.turns[5].state ?? "";
+      const reviewQueue = state.match(/^review_queue:\s*\n((?:[ \t]+.*\n)*)/m)?.[1] ?? "";
+      add("Attempted borrowing is saved as a specific review target",
+        /^\s*-\s*topic:\s*\S/m.test(reviewQueue)
+          && /^\s*reason:\s*\S/m.test(reviewQueue)
+          && /borrow|借/i.test(reviewQueue), 6,
+        "A queued topic and reason should identify the borrowing practice attempted by the learner");
+    }
+    if (trace.turns.length >= 7) {
+      add("Later practice starts in a fresh Codex thread",
+        Boolean(trace.turns[5].threadId && trace.turns[6].threadId
+          && trace.turns[5].threadId !== trace.turns[6].threadId), 7,
+        "The tutor must recover progress from learner state rather than prior thread context");
+      add("Fresh-thread reply starts a borrowing review task",
+        /borrow|借/i.test(reply(7)) && /[?？]/.test(reply(7)), 7,
+        "The response should ask the learner to apply the saved borrowing target; inspect the reply for pedagogical fit");
+    }
+  }
 
   const failed = checks.filter((check) => check.outcome === "fail");
   failures += failed.length;

@@ -64,8 +64,9 @@ const trace = resumeWorkspace
 if (trace.scenarioId !== scenarioId || trace.workspace !== workspace || trace.turns.length >= maxTurns) {
   throw new Error("Existing trace does not match the requested scenario or has no remaining turns");
 }
-let threadId = resumeWorkspace ? "--last" : undefined;
+let threadId = resumeWorkspace ? trace.turns.at(-1)?.threadId ?? "--last" : undefined;
 for (let index = trace.turns.length; index < maxTurns; index += 1) {
+  if (scenario.freshSessionStartTurn === index + 1) threadId = undefined;
   const turn = scenario.turns[index];
   const initialPrompt = `Use the English Learning skill at ${path.join(skillDir, "SKILL.md")} to tutor me. My learner message: ${turn.learner}`;
   const args = threadId
@@ -79,6 +80,7 @@ for (let index = trace.turns.length; index < maxTurns; index += 1) {
     learner: turn.learner,
     observe: turn.observe,
     reply: execution.reply,
+    threadId: execution.threadId ?? threadId,
     state: await readFile(statePath, "utf8").catch((error) => {
       if (error.code === "ENOENT") return null;
       throw error;
