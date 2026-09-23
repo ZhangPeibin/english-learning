@@ -17,6 +17,7 @@ reading_preferences:
   default_length: standard
 reading_history: []
 weak_areas: []
+learning_items: []
 review_queue: []
 last_studied: null
 ---

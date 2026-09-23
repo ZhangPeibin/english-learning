@@ -87,11 +87,13 @@ over.
 
 ### Continue learning
 
-Read the resolved learning-state file. Prefer a due review when the state has a
-review queue. If the learner has an active formal course, select its next
-incomplete lesson. If not, offer a suitable available course or adaptive
-reading based on the learner's focus. For a pre-reader, continue foundational
-practice instead of forcing a reading activity.
+Read the resolved learning-state file. Select due review from `learning_items`
+using `references/learning-state.md`; fall back to a due legacy `review_queue`
+entry only when no canonical learning item is due. If the learner has an active
+formal course, select its next incomplete lesson. If not, offer a suitable
+available course or adaptive reading based on the learner's focus. For a
+pre-reader, continue foundational practice instead of forcing a reading
+activity.
 
 Teach interactively in short sections:
 
@@ -101,8 +103,12 @@ Teach interactively in short sections:
 4. Explain mistakes in plain language and give one improved example.
 5. End with a small production task, such as a summary, spoken response, or
    short paragraph.
-6. Update the learning state with observed results. Never invent a score or
-   mark an unfinished lesson complete.
+6. Update the learning state with observed results. Record attempted new
+   vocabulary, grammar, and sentence patterns in the canonical `learning_items`
+   record, including the learner's response, its cue status, and its next due
+   date. Update and reschedule an existing matching item rather than adding a
+   duplicate. Never invent a score, response, or mastery, and never mark an
+   unfinished lesson complete.
 
 Across learner-facing sessions, give only one question or response task at a
 time. Explanations may contain multiple examples, but end with one clear next
@@ -134,10 +140,12 @@ claim that an unlisted course, exam track, or lesson already exists.
 
 ### Quiz or review
 
-Build questions from completed formal lessons, adaptive reading history, and
-recorded weak areas. Prefer recall, application, and correction over
-multiple-choice recognition. After grading, update weak areas and the review
-queue using actual evidence from the answers.
+Build questions from due `learning_items`, completed formal lessons, adaptive
+reading history, recorded weak areas, and legacy review entries. Prefer recall,
+application, and correction over multiple-choice recognition. After grading,
+append the observed attempt to the same learning item and update its status and
+due date using `references/learning-state.md`. Preserve legacy and unknown
+fields.
 
 ## Boundaries
 

@@ -12,8 +12,21 @@ creating or updating the file.
 - Record only observed results. Do not invent scores, study time, or completion.
 - Preserve learner notes and fields not defined here.
 - Keep `weak_areas` specific enough to guide a future exercise.
-- Add a review item only when the learner completed or attempted the material.
-- Replace a review item's due date after review instead of creating duplicates.
+- Add a learning item only after the learner has attempted or used it. Teaching
+  material alone is not response evidence.
+- Keep one canonical `learning_items` entry for each vocabulary item, grammar
+  point, or sentence pattern. Match entries by normalized meaning and use, not
+  spelling alone; update the existing entry instead of creating a duplicate.
+- Append an attempt only when the learner actually responded. Record whether
+  the response was independent or followed a prompt, hint, model, correction,
+  answer choice, or other cue.
+- Do not convert a cued success into independent success. Do not mark an item
+  mastered after one correct response or after a correction the tutor supplied.
+- After every review attempt, update the same item's `due_date`; do not add a
+  second learning item or duplicate review entry.
+- Treat `review_queue` as a legacy field. Read it when `learning_items` is absent
+  or has no due items, and preserve it and all unknown fields when updating an
+  existing learner file. New review records belong in `learning_items`.
 - Keep adaptive readings out of `completed_lessons` and `current_lesson`.
 - Store only useful adaptive-reading metadata by default, not generated passages.
 - Record only profile details the learner provides. Do not infer age, location,
@@ -38,10 +51,62 @@ creating or updating the file.
 - `reading_preferences`: topics and presentation choices for reading practice.
 - `reading_history`: concise records of completed adaptive reading sessions.
 - `weak_areas`: recurring or important difficulties observed in responses.
-- `review_queue`: lesson or topic, due date, and reason for review.
+- `learning_items`: canonical evidence and review schedule for vocabulary,
+  grammar, and sentence patterns.
+- `review_queue`: legacy review records retained for compatibility.
 
 Scores are optional integers from 0 to 100. Omit a score when the activity did
 not produce enough evidence for one.
 
 Each `reading_history` entry may contain `date`, `level`, `topic`, `result`,
 `new_vocabulary`, and `notes`. It must not use a formal curriculum lesson ID.
+
+## Learning items
+
+Each `learning_items` entry has this shape:
+
+```yaml
+- id: borrow-request
+  type: sentence_pattern
+  item: "Can I borrow your ...?"
+  meaning_or_use: "make a polite request to borrow something"
+  status: cued
+  due_date: 2026-09-24
+  attempts:
+    - date: 2026-09-23
+      prompt: "Ask a classmate for an eraser."
+      response: "Can I borrow your eraser?"
+      result: correct
+      support: cued
+```
+
+- `id` is a stable, concise identifier. Reuse it across later attempts.
+- `type` is `vocabulary`, `grammar`, or `sentence_pattern`.
+- `item` names the word, grammar point, or reusable pattern.
+- `meaning_or_use` distinguishes items that have the same spelling but a
+  different meaning or function.
+- `status` is `needs_work`, `cued`, `independent`, or `mastered`.
+- `due_date` is the next review date in `YYYY-MM-DD` format.
+- `attempts` is an append-only list of observed learner responses. Each attempt
+  records `date`, the concise `prompt`, the learner's actual `response`,
+  `result` (`correct`, `partial`, or `incorrect`), and `support` (`cued` or
+  `independent`). Preserve additional attempt fields if present.
+
+Use these conservative scheduling defaults unless the learner has an explicit
+schedule already recorded:
+
+- Incorrect or partial: set `status: needs_work` and review the next day.
+- Correct with any cue: set `status: cued` and review the next day.
+- First correct independent response: set `status: independent` and review in
+  3 days.
+- A later correct independent response on a different date and in a new
+  example: keep `status: independent` and review in 7 days.
+- Only after at least three correct independent attempts on different dates and
+  in varied examples: set `status: mastered` and review in 14 days.
+
+When choosing an activity, first select a due learning item whose `due_date` is
+today or earlier. Prefer the earliest date, then `needs_work`, `cued`,
+`independent`, and `mastered` in that order. Ask for recall or application in a
+new example without exposing the saved answer. If no learning item is due, use
+the ordinary course or adaptive-practice workflow. A learner may still ask to
+review an item before its due date.
