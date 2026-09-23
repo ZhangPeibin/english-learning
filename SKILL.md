@@ -122,6 +122,10 @@ After the learner answers a task, the learner-facing reply must:
 2. Give one concise explanation or correction when useful.
 3. End with exactly one next learner task.
 
+If the learner explicitly asks to stop after answering, still grade the actual
+answer and update the learning state silently, then close the session without
+giving another task.
+
 Perform learning-state updates, legacy conversion, deduplication, schema
 repair, and file writes silently. Never mention YAML, field names, state files,
 migrations, merges, repairs, or write progress in a teaching reply. Do not let
