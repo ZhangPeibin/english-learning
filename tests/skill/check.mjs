@@ -158,6 +158,32 @@ export function evaluateTrace(trace) {
       }
     }
   }
+  const masteryExpectations = {
+    mastery_first: ["independent", 3, 3],
+    mastery_second: ["independent", 7, 2],
+    mastery_third: ["mastered", 14, 3],
+    mastery_regression: ["needs_work", 1, 4],
+    mastery_recovery: ["independent", 3, 5]
+  };
+  if (trace.scenarioId in masteryExpectations && trace.turns.length >= 2) {
+    const [status, interval, attemptCount] = masteryExpectations[trace.scenarioId];
+    const turn = trace.turns[1];
+    const items = learningEntries(turn.state ?? "");
+    const item = items.find((entry) => /id:\s*borrow-request\b/.test(entry)) ?? "";
+    const attempts = item.split(/(?=^[ \t]+-[ \t]+date:[ \t]*\d{4}-\d{2}-\d{2}[ \t]*$)/m).slice(1);
+    const answer = trace.scenarioId === "mastery_regression" ? "Can I borrowed your notebook?" : "Can I borrow your notebook?";
+    const result = trace.scenarioId === "mastery_regression" ? "partial" : "correct";
+    const latest = attempts.at(-1) ?? "";
+    add("Observed answer updates the same item at the correct mastery stage",
+      items.filter((entry) => /id:\s*borrow-request\b/.test(entry)).length === 1
+        && attempts.length === attemptCount
+        && new RegExp(`^\\s*status:\\s*${status}\\s*$`, "m").test(item)
+        && new RegExp(`^\\s*due_date:\\s*${calendarDaysLater(turn.localDate, interval)}\\s*$`, "m").test(item)
+        && latest.includes(`response: "${answer}"`)
+        && /^\s*support:\s*independent\s*$/m.test(latest)
+        && new RegExp(`^\\s*result:\\s*${result}\\s*$`, "m").test(latest), 2,
+      "Status and next review must use only independent successes since the latest error or cue");
+  }
 
   return checks;
 }

@@ -16,6 +16,31 @@ const priorLegacyHistory = `
       due: 2019-01-01
       coach_note: "previous migration"`;
 
+const daysAgo = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+};
+
+const masteryItem = (status, attempts) => `
+  - id: borrow-request
+    type: sentence_pattern
+    item: "Can I borrow your ...?"
+    meaning_or_use: "make a polite request to borrow something"
+    status: ${status}
+    due_date: ${daysAgo(1)}
+    attempts:
+${attempts.map(({ days, object, response, result, support }) => `      - date: ${daysAgo(days)}
+        prompt: "Ask a classmate for a ${object}."
+        response: "${response}"
+        result: ${result}
+        support: ${support}`).join("\n")}`;
+
+const masteryTurns = [
+  { learner: "我回来继续练学校英语。今天用笔记本作例子。", observe: "Select the overdue borrowing pattern and ask one notebook-based application without showing the English form." },
+  { learner: "Can I borrow your notebook?", observe: "Grade this new example and update the existing item from the actual independent response without adding a duplicate." }
+];
+
 export const scenarios = {
   onboarding: {
     name: "New child learner: one question at a time",
@@ -335,6 +360,56 @@ export const scenarios = {
       { learner: "我回来了，今天想继续练学校里的英语。今天想用笔记本作例子。", observe: "The canonical grammar item is not due; select the overdue legacy borrowing request and ask for a notebook-based application without revealing the answer." },
       { learner: "Can I borrow your notebook?", observe: "Grade the borrowing response, preserve the future-due grammar item, convert the legacy source into one canonical pattern item, and archive the source unchanged while retaining prior history and unrelated queue data." }
     ]
+  },
+  mastery_first: {
+    name: "First independent answer after an error and a cued correction",
+    profile: { preferredName: "Tao", age: "12", goal: "Ask classmates for school items", level: "A1", focus: ["speaking"] },
+    learningItems: masteryItem("cued", [
+      { days: 4, object: "book", response: "Can I borrowed your book?", result: "incorrect", support: "independent" },
+      { days: 3, object: "eraser", response: "Can I borrow your eraser?", result: "correct", support: "cued" }
+    ]),
+    turns: masteryTurns
+  },
+  mastery_second: {
+    name: "Second independent answer on a later date and new example",
+    profile: { preferredName: "Tao", age: "12", goal: "Ask classmates for school items", level: "A1", focus: ["speaking"] },
+    learningItems: masteryItem("independent", [
+      { days: 4, object: "eraser", response: "Can I borrow your eraser?", result: "correct", support: "independent" }
+    ]),
+    turns: masteryTurns
+  },
+  mastery_third: {
+    name: "Third independent answer on a later date and new example",
+    profile: { preferredName: "Tao", age: "12", goal: "Ask classmates for school items", level: "A1", focus: ["speaking"] },
+    learningItems: masteryItem("independent", [
+      { days: 11, object: "eraser", response: "Can I borrow your eraser?", result: "correct", support: "independent" },
+      { days: 4, object: "ruler", response: "Can I borrow your ruler?", result: "correct", support: "independent" }
+    ]),
+    turns: masteryTurns
+  },
+  mastery_regression: {
+    name: "An error after mastery restores next-day review",
+    profile: { preferredName: "Tao", age: "12", goal: "Ask classmates for school items", level: "A1", focus: ["speaking"] },
+    learningItems: masteryItem("mastered", [
+      { days: 18, object: "book", response: "Can I borrow your book?", result: "correct", support: "independent" },
+      { days: 11, object: "eraser", response: "Can I borrow your eraser?", result: "correct", support: "independent" },
+      { days: 4, object: "ruler", response: "Can I borrow your ruler?", result: "correct", support: "independent" }
+    ]),
+    turns: [
+      masteryTurns[0],
+      { learner: "Can I borrowed your notebook?", observe: "Correct the actual error, append the incorrect attempt, lower the existing item's status to needs_work, and schedule review for the next local day." }
+    ]
+  },
+  mastery_recovery: {
+    name: "One correct answer after a regression does not restore mastery",
+    profile: { preferredName: "Tao", age: "12", goal: "Ask classmates for school items", level: "A1", focus: ["speaking"] },
+    learningItems: masteryItem("needs_work", [
+      { days: 18, object: "book", response: "Can I borrow your book?", result: "correct", support: "independent" },
+      { days: 11, object: "eraser", response: "Can I borrow your eraser?", result: "correct", support: "independent" },
+      { days: 4, object: "ruler", response: "Can I borrow your ruler?", result: "correct", support: "independent" },
+      { days: 1, object: "pencil", response: "Can I borrowed your pencil?", result: "partial", support: "independent" }
+    ]),
+    turns: masteryTurns
   },
   tense_b1: {
     name: "B1 grammar: present perfect versus past simple",

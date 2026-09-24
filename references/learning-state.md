@@ -145,6 +145,12 @@ from the current attempt date.
 - Only after at least three correct independent attempts on different dates and
   in varied examples: set `status: mastered` and review in 14 days.
 
+Count independent successes only since the most recent incorrect, partial, or
+cued attempt. Such an attempt breaks the mastery streak; the next correct
+independent response is a first independent success again, with review in 3
+days. Keep earlier attempts as evidence, but never use them to restore mastery
+after one recovery answer.
+
 When choosing an activity, first select a due learning item whose `due_date` is
 today or earlier. Prefer the earliest date, then `needs_work`, `cued`,
 `independent`, and `mastered` in that order. Ask for recall or application in a
