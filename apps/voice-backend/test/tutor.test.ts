@@ -60,7 +60,11 @@ lines.on("line", (line) => {
     turn += 1;
     const turnId = "turn-" + turn;
     send({ id: message.id, result: { turn: { id: turnId, status: "inProgress" } } });
-    send({ method: "item/completed", params: { threadId: message.params.threadId, turnId, item: { type: "agentMessage", text: JSON.stringify({ replyText: "reply " + turn }) } } });
+    const raw = JSON.stringify({ replyText: "reply " + turn + "\\nthere" });
+    const split = raw.indexOf("\\\\n") + 1;
+    send({ method: "item/agentMessage/delta", params: { turnId, delta: raw.slice(0, split) } });
+    send({ method: "item/agentMessage/delta", params: { turnId, delta: raw.slice(split) } });
+    send({ method: "item/completed", params: { threadId: message.params.threadId, turnId, item: { type: "agentMessage", text: raw } } });
     return send({ method: "turn/completed", params: { threadId: message.params.threadId, turn: { id: turnId, status: "completed", error: null } } });
   }
 });
@@ -74,16 +78,19 @@ function send(message) { process.stdout.write(JSON.stringify(message) + "\\n"); 
   };
 
   const tutor = await createTutor(config);
-  const first = await tutor.ask("hello");
+  const partials: string[] = [];
+  const first = await tutor.ask("hello", undefined, undefined, (text) => partials.push(text));
   const second = await tutor.ask("again", first.threadId);
   await tutor.close();
   const restartedTutor = await createTutor(config);
   const third = await restartedTutor.ask("after restart", first.threadId);
   await restartedTutor.close();
 
-  expect(first).toEqual({ threadId: "thread-app-server", replyText: "reply 1" });
-  expect(second).toEqual({ threadId: "thread-app-server", replyText: "reply 2" });
-  expect(third).toEqual({ threadId: "thread-app-server", replyText: "reply 1" });
+  expect(first).toEqual({ threadId: "thread-app-server", replyText: "reply 1\nthere" });
+  expect(partials).toContain("reply 1");
+  expect(partials).toContain("reply 1\nthere");
+  expect(second).toEqual({ threadId: "thread-app-server", replyText: "reply 2\nthere" });
+  expect(third).toEqual({ threadId: "thread-app-server", replyText: "reply 1\nthere" });
   const events = (await readFile(eventsPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   expect(events.filter((event) => event.event === "process")).toHaveLength(2);
   expect(events.filter((event) => event.message?.method === "thread/start")).toHaveLength(1);

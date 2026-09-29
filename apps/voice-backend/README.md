@@ -35,8 +35,8 @@ export VOICE_PORT='3000'
 
 Keep the token out of shell history, source control, service definitions readable by other users, and logs. A host secret manager or a mode-`0600` environment file loaded by the service manager is preferable.
 
-`VOICE_CODEX_TRANSPORT` defaults to `exec`. Set it to `app-server` to keep one
-experimental Codex app-server process alive and send multiple turns through it.
+`VOICE_CODEX_TRANSPORT` defaults to `app-server` to keep one experimental Codex
+app-server process alive and stream reply text. Set it to `exec` to opt out.
 If app-server initialization fails before a turn starts, the backend safely
 falls back to `codex exec`. It never automatically replays a turn after
 `turn/start`, because an ambiguous retry could advance the conversation twice.
@@ -67,6 +67,11 @@ Create a session with `POST /v1/sessions`. Submit audio as multipart data to
 `POST /v1/sessions/:sessionId/text-turns`. Typed text is limited to 4,000
 characters and bypasses FFmpeg and Whisper while sharing the same Codex
 conversation, turn idempotency, concurrency lock, and private history.
+Clients can request `Accept: application/x-ndjson` on either turn endpoint to
+receive newline-delimited `transcript`, `partial` (complete text so far), then
+`complete` events. A failure after streaming starts sends an `error` event;
+only completed turns enter history. Other clients keep the original JSON response.
+If app-server is unavailable, the `complete` event still delivers the full reply.
 
 Stop a foreground process with `Ctrl-C`, or have the service manager send
 `SIGTERM`. FFmpeg, Whisper, and Codex calls are bounded to 30, 120, and 180

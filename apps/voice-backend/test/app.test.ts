@@ -294,6 +294,64 @@ describe("voice tutor API", () => {
     await app.close();
   });
 
+  test("streams tutor text and commits only the completed reply", async () => {
+    const { config } = await fixtureConfig();
+    config.codexTransport = "app-server";
+    await executable(config.codexPath, `
+      const readline = require("node:readline");
+      let turn = 0;
+      readline.createInterface({ input: process.stdin }).on("line", (line) => {
+        const message = JSON.parse(line);
+        const send = (event) => process.stdout.write(JSON.stringify(event) + "\\n");
+        if (message.method === "initialize") send({ id: message.id, result: {} });
+        if (message.method === "thread/start") send({ id: message.id, result: { thread: { id: "thread-1" } } });
+        if (message.method === "turn/start") {
+          const turnId = "codex-turn-" + ++turn;
+          send({ id: message.id, result: { turn: { id: turnId } } });
+          send({ method: "item/agentMessage/delta", params: { turnId, delta: '{"replyText":"Hello' } });
+          setTimeout(() => {
+            send({ method: "item/agentMessage/delta", params: { turnId, delta: ' there"}' } });
+            send({ method: "item/completed", params: { turnId, item: { type: "agentMessage", text: '{"replyText":"Hello there"}' } } });
+            send({ method: "turn/completed", params: { turn: { id: turnId, status: turn === 3 ? "failed" : "completed" } } });
+          }, 30);
+        }
+      });
+    `);
+    const app = await buildApp(config, { logger: false });
+    const { sessionId, auth } = await session(app, config);
+    const url = `/v1/sessions/${sessionId}/text-turns`;
+    const payload = { turnId: "stream-1", text: "Hi" };
+    const response = await app.inject({ method: "POST", url,
+      headers: { ...auth, accept: "application/x-ndjson" }, payload });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/x-ndjson");
+    const events = response.body.trim().split("\n").map((line) => JSON.parse(line));
+    expect(events).toEqual([
+      { type: "transcript", transcript: "Hi" },
+      { type: "partial", replyText: "Hello" },
+      { type: "partial", replyText: "Hello there" },
+      { type: "complete", turnId: "stream-1", transcript: "Hi", replyText: "Hello there" }
+    ]);
+    const retry = await app.inject({ method: "POST", url, headers: { ...auth, accept: "application/x-ndjson" }, payload });
+    expect(retry.json().replyText).toBe("Hello there");
+    const boundary = "stream-audio-boundary";
+    const audio = await app.inject({ method: "POST", url: `/v1/sessions/${sessionId}/turns`,
+      headers: { ...auth, accept: "application/x-ndjson", "content-type": `multipart/form-data; boundary=${boundary}` },
+      payload: wavMultipart(boundary, "stream-audio") });
+    expect(audio.statusCode).toBe(200);
+    const audioEvents = audio.body.trim().split("\n").map((line) => JSON.parse(line));
+    expect(audioEvents[0]).toEqual({ type: "transcript", transcript: "Hello tutor" });
+    expect(audioEvents.at(-1)).toEqual({ type: "complete", turnId: "stream-audio", transcript: "Hello tutor", replyText: "Hello there" });
+    const failed = await app.inject({ method: "POST", url,
+      headers: { ...auth, accept: "application/x-ndjson" }, payload: { turnId: "stream-failed", text: "Try again" } });
+    const failedEvents = failed.body.trim().split("\n").map((line) => JSON.parse(line));
+    expect(failedEvents.some((event) => event.type === "partial")).toBe(true);
+    expect(failedEvents.at(-1)).toMatchObject({ type: "error", error: { code: "codex_failed", retryable: true } });
+    const history = JSON.parse(await readFile(path.join(config.runtimeDir, "conversation-history.json"), "utf8"));
+    expect(history.conversations[0].turns).toHaveLength(2);
+    await app.close();
+  });
+
   test.each([
     [{ turnId: "turn-empty", text: "   " }, 400, "invalid_text_turn"],
     [{ turnId: "turn-large", text: "a".repeat(4_001) }, 413, "text_too_large"]

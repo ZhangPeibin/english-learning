@@ -63,7 +63,7 @@ export async function loadConfig(env: NodeJS.ProcessEnv = process.env): Promise<
   if (!token) throw new Error("VOICE_ACCESS_TOKEN is required");
   const port = Number(env.VOICE_PORT ?? "3000");
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("VOICE_PORT is invalid");
-  const codexTransport = env.VOICE_CODEX_TRANSPORT?.trim() || "exec";
+  const codexTransport = env.VOICE_CODEX_TRANSPORT?.trim() || "app-server";
   if (codexTransport !== "exec" && codexTransport !== "app-server") {
     throw new Error("VOICE_CODEX_TRANSPORT must be exec or app-server");
   }

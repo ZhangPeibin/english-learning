@@ -2,7 +2,7 @@ import {
   AudioLines, CircleStop, LoaderCircle, MessageCircle, Mic, Play, Plus,
   RotateCcw, SendHorizontal, SlidersHorizontal, Upload, Volume2, VolumeX, createIcons
 } from "lucide";
-import { ApiError, VoiceApi, type TurnResult } from "./api";
+import { ApiError, VoiceApi, type TurnProgress, type TurnResult } from "./api";
 import { preferredVoice, speechSegments, voicesForLanguage, type SpeechLanguage } from "./speech";
 import "./styles.css";
 
@@ -142,12 +142,13 @@ function previewVoice(text: string, language: SpeechLanguage) {
   speakSegment(text, language);
 }
 
-function addTurn(turn: TurnResult) {
+function addTurn(turn: TurnProgress) {
   emptyState.hidden = true;
   const learner = document.createElement("article");
   learner.className = "message learner-message";
   learner.innerHTML = `<span class="message-label">You</span><p></p>`;
-  learner.querySelector("p")!.textContent = turn.transcript;
+  const learnerText = learner.querySelector("p")!;
+  learnerText.textContent = turn.transcript ?? "";
 
   const tutor = document.createElement("article");
   tutor.className = "message tutor-message";
@@ -159,11 +160,29 @@ function addTurn(turn: TurnResult) {
       </button>
     </div>
     <p></p>`;
-  tutor.querySelector("p")!.textContent = turn.replyText;
-  tutor.querySelector("button")!.addEventListener("click", () => speak(turn.replyText));
+  const tutorText = tutor.querySelector("p")!;
+  tutorText.textContent = turn.replyText || "...";
+  const speakButton = tutor.querySelector("button") as HTMLButtonElement;
+  speakButton.disabled = !turn.replyText;
+  speakButton.addEventListener("click", () => speak(tutorText.textContent ?? ""));
   messages.append(learner, tutor);
   refreshIcons();
   requestAnimationFrame(() => conversation.scrollTo({ top: conversation.scrollHeight, behavior: "smooth" }));
+  return {
+    update(progress: TurnProgress) {
+      if (progress.transcript !== undefined) learnerText.textContent = progress.transcript;
+      if (progress.replyText !== undefined) {
+        tutorText.textContent = progress.replyText;
+        speakButton.disabled = !progress.replyText;
+        conversation.scrollTop = conversation.scrollHeight;
+      }
+    },
+    remove() {
+      learner.remove();
+      tutor.remove();
+      emptyState.hidden = messages.childElementCount > 0;
+    }
+  };
 }
 
 async function ensureSession(): Promise<string> {
@@ -197,26 +216,32 @@ async function sendTurn(turn: PendingTurn) {
   clearError();
   setBusy(true, "Thinking");
   pendingTurn = turn;
+  let visible = turn.kind === "text" ? addTurn({ transcript: turn.text }) : null;
+  const onProgress = (progress: TurnProgress) => {
+    visible ??= addTurn(progress);
+    visible.update(progress);
+  };
   try {
     let activeSession = await ensureSession();
     let result: TurnResult;
     try {
       result = turn.kind === "audio"
-        ? await api.submitTurn(activeSession, turn.turnId, turn.audio, turn.filename)
-        : await api.submitText(activeSession, turn.turnId, turn.text);
+        ? await api.submitTurn(activeSession, turn.turnId, turn.audio, turn.filename, onProgress)
+        : await api.submitText(activeSession, turn.turnId, turn.text, onProgress);
     } catch (error) {
       if (!(error instanceof ApiError) || error.code !== "session_not_found") throw error;
       sessionId = null;
       sessionStorage.removeItem("voice-session-id");
       activeSession = await ensureSession();
       result = turn.kind === "audio"
-        ? await api.submitTurn(activeSession, turn.turnId, turn.audio, turn.filename)
-        : await api.submitText(activeSession, turn.turnId, turn.text);
+        ? await api.submitTurn(activeSession, turn.turnId, turn.audio, turn.filename, onProgress)
+        : await api.submitText(activeSession, turn.turnId, turn.text, onProgress);
     }
     pendingTurn = null;
-    addTurn(result);
+    onProgress(result);
     if (turn.kind === "audio" && autoSpeak) speak(result.replyText);
   } catch (error) {
+    visible?.remove();
     const canRetry = !(error instanceof ApiError) || error.retryable;
     showError(errorCopy(error), canRetry);
   } finally {

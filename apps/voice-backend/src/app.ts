@@ -1,4 +1,4 @@
-import Fastify, { type FastifyServerOptions } from "fastify";
+import Fastify, { type FastifyReply, type FastifyServerOptions } from "fastify";
 import multipart from "@fastify/multipart";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,6 +11,15 @@ import { AudioError, MAX_AUDIO_BYTES, audioExtension, normalizeAudio, recognizeA
 const errorBody = (code: string, message: string, retryable = false) => ({ error: { code, message, retryable } });
 const turnResponse = ({ turnId, transcript, replyText }: { turnId: string; transcript: string; replyText: string }) =>
   ({ turnId, transcript, replyText });
+const wantsStream = (accept: string | undefined) => accept?.includes("application/x-ndjson") ?? false;
+function streamEvent(reply: FastifyReply, event: object): void {
+  if (reply.raw.destroyed) return;
+  if (!reply.sent) {
+    reply.hijack();
+    reply.raw.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" });
+  }
+  reply.raw.write(`${JSON.stringify(event)}\n`);
+}
 
 export async function buildApp(config: Config, options: { logger?: FastifyServerOptions["logger"] } = {}) {
   const app = Fastify({ logger: options.logger ?? true });
@@ -62,14 +71,18 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
     if (activeSessions.has(request.params.sessionId)) {
       return reply.code(409).send(errorBody("session_busy", "Another turn is already in progress.", true));
     }
+    const streaming = wantsStream(request.headers.accept);
     const abortController = new AbortController();
     request.raw.once("aborted", () => abortController.abort());
+    if (streaming) reply.raw.once("close", () => { if (!reply.raw.writableEnded) abortController.abort(); });
     activeSessions.add(request.params.sessionId);
     try {
+      if (streaming) streamEvent(reply, { type: "transcript", transcript });
       const codexStarted = Date.now();
       let result;
       try {
-        result = await tutor.ask(transcript, session.codexThreadId, abortController.signal);
+        result = await tutor.ask(transcript, session.codexThreadId, abortController.signal,
+          streaming ? (replyText) => streamEvent(reply, { type: "partial", replyText }) : undefined);
         request.log.info({ requestId: request.id, stage: "codex", outcome: "success",
           durationMs: Date.now() - codexStarted }, "dependency completed");
       } catch (error) {
@@ -79,6 +92,11 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       }
       const stored = await state.completeTurn(request.params.sessionId, result.threadId,
         { turnId, transcript, replyText: result.replyText });
+      if (streaming) {
+        streamEvent(reply, { type: "complete", ...turnResponse(stored) });
+        reply.raw.end();
+        return reply;
+      }
       return turnResponse(stored);
     } catch (error) {
       const tutorError = error instanceof TutorError
@@ -91,6 +109,12 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       };
       request.log.warn({ requestId: request.id, errorCode: tutorError.code,
         durationMs: Date.now() - requestStarted }, "text turn failed");
+      if (streaming && reply.sent) {
+        streamEvent(reply, { type: "error", ...errorBody(tutorError.code,
+          messages[tutorError.code] ?? "The tutor service failed.", true) });
+        reply.raw.end();
+        return reply;
+      }
       return reply.code(502).send(errorBody(tutorError.code,
         messages[tutorError.code] ?? "The tutor service failed.", true));
     } finally {
@@ -105,8 +129,10 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
     if (!session) return reply.code(404).send(errorBody("session_not_found", "Session not found."));
     const workDir = await mkdtemp(path.join(tmpdir(), "voice-turn-"));
     const abortController = new AbortController();
+    const streaming = wantsStream(request.headers.accept);
     let ownsActiveTurn = false;
     request.raw.once("aborted", () => abortController.abort());
+    if (streaming) reply.raw.once("close", () => { if (!reply.raw.writableEnded) abortController.abort(); });
     const dependencyOutcome = (stage: string) => (outcome: string, durationMs: number) => {
       request.log.info({ requestId: request.id, stage, outcome, durationMs }, "dependency completed");
     };
@@ -139,10 +165,12 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       const normalizedPath = path.join(workDir, "normalized.wav");
       await normalizeAudio(config, sourcePath, normalizedPath, abortController.signal, dependencyOutcome("ffmpeg"));
       const transcript = await recognizeAudio(config, normalizedPath, path.join(workDir, "transcript"), abortController.signal, dependencyOutcome("whisper"));
+      if (streaming) streamEvent(reply, { type: "transcript", transcript });
       const codexStarted = Date.now();
       let result;
       try {
-        result = await tutor.ask(transcript, session.codexThreadId, abortController.signal);
+        result = await tutor.ask(transcript, session.codexThreadId, abortController.signal,
+          streaming ? (replyText) => streamEvent(reply, { type: "partial", replyText }) : undefined);
         dependencyOutcome("codex")("success", Date.now() - codexStarted);
       } catch (error) {
         dependencyOutcome("codex")("failed", Date.now() - codexStarted);
@@ -150,6 +178,11 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
       }
       const completedTurn = { turnId, transcript, replyText: result.replyText };
       const storedTurn = await state.completeTurn(request.params.sessionId, result.threadId, completedTurn);
+      if (streaming) {
+        streamEvent(reply, { type: "complete", ...turnResponse(storedTurn) });
+        reply.raw.end();
+        return reply;
+      }
       return turnResponse(storedTurn);
     } catch (error) {
       let audioError: AudioError;
@@ -176,6 +209,12 @@ export async function buildApp(config: Config, options: { logger?: FastifyServer
         codex_invalid_response: "The tutor returned an invalid response.",
         dependency_failed: "The voice turn could not be completed."
       };
+      if (streaming && reply.sent) {
+        streamEvent(reply, { type: "error", statusCode: audioError.statusCode, ...errorBody(audioError.code,
+          messages[audioError.code] ?? "The voice turn could not be completed.", audioError.retryable) });
+        reply.raw.end();
+        return reply;
+      }
       reply.code(audioError.statusCode);
       return errorBody(audioError.code, messages[audioError.code] ?? "The voice turn could not be completed.", audioError.retryable);
     } finally {

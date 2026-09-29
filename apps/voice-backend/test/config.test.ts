@@ -48,13 +48,13 @@ describe("startup configuration", () => {
     const config = await loadConfig(env);
     expect(config.port).toBe(3000);
     expect(config.runtimeDir).toBe(env.VOICE_RUNTIME_DIR);
-    expect(config.codexTransport).toBe("exec");
+    expect(config.codexTransport).toBe("app-server");
   });
 
-  test("accepts app-server transport and rejects unknown transports", async () => {
+  test("accepts exec transport and rejects unknown transports", async () => {
     const env = await validEnvironment();
-    env.VOICE_CODEX_TRANSPORT = "app-server";
-    await expect(loadConfig(env)).resolves.toMatchObject({ codexTransport: "app-server" });
+    env.VOICE_CODEX_TRANSPORT = "exec";
+    await expect(loadConfig(env)).resolves.toMatchObject({ codexTransport: "exec" });
     env.VOICE_CODEX_TRANSPORT = "unknown";
     await expect(loadConfig(env)).rejects.toThrow("VOICE_CODEX_TRANSPORT must be exec or app-server");
   });

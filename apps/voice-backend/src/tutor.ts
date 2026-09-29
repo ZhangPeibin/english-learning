@@ -8,7 +8,7 @@ import { ProcessFailure, runProcess } from "./process.js";
 export interface TutorResult { threadId: string; replyText: string }
 export interface Tutor {
   readonly mode: "exec" | "app-server";
-  ask(transcript: string, threadId?: string, signal?: AbortSignal): Promise<TutorResult>;
+  ask(transcript: string, threadId?: string, signal?: AbortSignal, onPartial?: (text: string) => void): Promise<TutorResult>;
   close(): Promise<void>;
 }
 export class TutorError extends Error {
@@ -91,6 +91,8 @@ class AppServerTutor implements Tutor {
   private readonly turnWaiters = new Map<string, PendingValue<any>>();
   private readonly replies = new Map<string, string>();
   private readonly replyWaiters = new Map<string, PendingValue<string>>();
+  private readonly replyDeltas = new Map<string, string>();
+  private readonly partialListeners = new Map<string, (text: string) => void>();
   private stderr = "";
   private outputSchema: unknown;
   private starting?: Promise<void>;
@@ -131,7 +133,7 @@ class AppServerTutor implements Tutor {
     this.notify("initialized");
   }
 
-  async ask(transcript: string, existingThreadId?: string, signal?: AbortSignal): Promise<TutorResult> {
+  async ask(transcript: string, existingThreadId?: string, signal?: AbortSignal, onPartial?: (text: string) => void): Promise<TutorResult> {
     if (!this.child || this.child.exitCode !== null) await this.initialize();
     const threadId = await this.ensureThread(existingThreadId);
     const response = await this.request("turn/start", {
@@ -141,6 +143,11 @@ class AppServerTutor implements Tutor {
     }, 30_000);
     const turnId = response?.turn?.id;
     if (typeof turnId !== "string") throw new TutorError("codex_invalid_response");
+    if (onPartial) {
+      this.partialListeners.set(turnId, onPartial);
+      const buffered = partialReply(this.replyDeltas.get(turnId) ?? "");
+      if (buffered) onPartial(buffered);
+    }
     const abort = () => { void this.request("turn/interrupt", { threadId, turnId }, 5_000).catch(() => {}); };
     signal?.addEventListener("abort", abort, { once: true });
     try {
@@ -167,6 +174,8 @@ class AppServerTutor implements Tutor {
       signal?.removeEventListener("abort", abort);
       this.completedTurns.delete(turnId);
       this.replies.delete(turnId);
+      this.replyDeltas.delete(turnId);
+      this.partialListeners.delete(turnId);
     }
   }
 
@@ -265,6 +274,13 @@ class AppServerTutor implements Tutor {
     if (message.method === "item/completed" && message.params?.item?.type === "agentMessage") {
       this.resolveValue(this.replies, this.replyWaiters, message.params.turnId, message.params.item.text);
     }
+    if (message.method === "item/agentMessage/delta" && typeof message.params?.turnId === "string" && typeof message.params.delta === "string") {
+      const turnId = message.params.turnId;
+      const raw = (this.replyDeltas.get(turnId) ?? "") + message.params.delta;
+      this.replyDeltas.set(turnId, raw);
+      const partial = partialReply(raw);
+      if (partial) this.partialListeners.get(turnId)?.(partial);
+    }
     if (message.method === "turn/completed") {
       this.resolveValue(this.completedTurns, this.turnWaiters, message.params?.turn?.id, message.params?.turn);
     }
@@ -292,7 +308,15 @@ class AppServerTutor implements Tutor {
     this.pending.clear();
     this.turnWaiters.clear();
     this.replyWaiters.clear();
+    this.replyDeltas.clear();
+    this.partialListeners.clear();
   }
+}
+
+function partialReply(raw: string): string | undefined {
+  // spotter: reparse short speech replies per delta; use an incremental JSON tokenizer if replies grow long.
+  const match = /"replyText"\s*:\s*"((?:[^"\\]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*)/.exec(raw);
+  return match ? JSON.parse(`"${match[1]}"`) as string : undefined;
 }
 
 export async function createTutor(config: Config): Promise<Tutor> {
